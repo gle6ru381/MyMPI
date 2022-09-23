@@ -3,6 +3,17 @@ name = "my_mpi"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "my_mpi"
+path = "src/main.rs"
+
+[lib]
+name = "mpi"
+path = "src/mpi/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+libc = "0.2"
+zstr = "0.1.1"
