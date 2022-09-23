@@ -1,55 +1,47 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
-use std::{ffi::CStr};
+use std::{ffi::CStr, ptr::{read_volatile, write_volatile}};
 use libc::c_void;
 
 use crate::types::*;
 
 const BufLen : usize = 4096;
 
-struct MpiShm {
+struct ShmCell {
     pub len : i32,
     pub tag : i16,
-    pub pad : i16,
-    m_flags : [i8; 2],
+    m_flag : i8,
+    pub pad : i8,
+    pub buff : [i8; 4096],
+}
+
+impl ShmCell {
+    pub fn flag(& self) -> i8 {
+        return unsafe {read_volatile::<i8>(&self.m_flag)};
+    }
+    pub fn setFlag(&mut self, val : i8) {
+        return unsafe {write_volatile(&mut self.m_flag, val)};
+    }
+}
+
+struct MpiShm {
     pub nsend : i8,
     pub nrecv : i8,
-    pub buff : [[i8; 4096]; 2]
+    pub cells : [ShmCell; 2],
+}
+
+impl MpiShm {
+    pub fn swapSend(&mut self) {
+        self.nsend = if self.nsend == 0 {1} else {0}
+    }
+    pub fn swapRecv(&mut self) {
+        self.nrecv = if self.nrecv == 0 {1} else {0}
+    }
 }
 
 pub struct ShmData {d : *mut MpiShm}
 
 unsafe impl Sync for ShmData {}
-
-impl MpiShm {
-
-    pub fn Default() -> MpiShm {
-        let d = std::mem::MaybeUninit::<MpiShm>::uninit();
-        unsafe {
-            let mut shm = d.assume_init();
-            shm.len = 0;
-            shm.tag = 0;
-            shm.pad = 0;
-            shm.m_flags = [0, 0];
-            shm.nsend = 0;
-            shm.nrecv = 0;
-            return shm;
-        }
-    }
-
-    pub fn flags(&self, idx : usize) -> i8 {
-        unsafe {
-            let mut d = std::ptr::read_volatile(&self.m_flags[idx]);
-            return d
-        }
-    }
-
-    pub fn setFlag(&mut self, idx : usize,  val : i8) {
-        unsafe {
-            std::ptr::write_volatile(&mut self.m_flags[idx], val);
-        }
-    }
-}
 
 pub struct MpiContext {
     pub shm : ShmData,
@@ -161,33 +153,40 @@ impl MpiContext {
 
     pub fn send(buf : *mut c_void, cnt : i32, dtype : MPI_Datatype, dest : i32, tag : i32, comm : MPI_Comm) -> i32 {
         unsafe {
-            let mut pshm = context.shm.d.add((Self::rank() * Self::size() + dest) as usize).as_mut().unwrap();
+            assert!(dest >= 0 && dest < Self::size() && dest != Self::rank());
+            assert!(dtype == MPI_BYTE);
+            assert!(tag >= 0 && tag <= 32767);
+            assert!(comm == MPI_COMM_WORLD);
 
-            while pshm.flags(pshm.nsend as usize) != 0
+            let mut pshm = context.shm.d.add((Self::rank() * Self::size() + dest) as usize).as_mut().unwrap();
+            let mut cell = &mut pshm.cells[pshm.nsend as usize];
+
+            while cell.flag() != 0
             {continue};
 
-            pshm.tag = tag as i16;
-            pshm.len = cnt;
-
-            if pshm.len == 0 {
-                pshm.setFlag(pshm.nsend as usize, 1);
+            cell.tag = tag as i16;
+            cell.len = cnt;
+            if cell.len  == 0 {
+                cell.setFlag(1);
+                pshm.swapSend();
             } else {
                 let mut pbuf = buf;
                 let mut len = cnt;
                 while len > 0 {
-                    while pshm.flags(pshm.nsend as usize) != 0 {
+                    while cell.flag() != 0 {
                         continue;
                     }
 
-                    let ptr = (&mut pshm.buff[pshm.nsend as usize]).as_mut_ptr();
+                    let ptr = (&mut cell.buff).as_mut_ptr();
                     let bytes = if (len as usize) < BufLen {cnt as usize} else {BufLen};
 
                     ptr.copy_from(pbuf as *const i8, bytes);
-                    pshm.setFlag(pshm.nsend as usize, 1);
-                    pshm.nsend = !pshm.nsend;
+                    cell.setFlag(1);
+                    pshm.swapSend();
 
                     pbuf = pbuf.add(BufLen);
                     len -= BufLen as i32;
+                    cell = &mut pshm.cells[pshm.nsend as usize];
                 }
                 pshm.nsend = 0;
             }
@@ -199,35 +198,38 @@ impl MpiContext {
     pub fn recv(buf : *mut c_void, cnt : i32, dtype : MPI_Datatype, src : i32, tag : i32, comm : MPI_Comm, pstat : *mut MPI_Status) -> i32 {
         unsafe {
             let mut pshm = context.shm.d.add((src * Self::size() + Self::rank()) as usize).as_mut().unwrap();
+            let mut cell = &mut pshm.cells[pshm.nrecv as usize];
 
-            while pshm.flags(pshm.nrecv as usize) == 0 {continue};
+            while cell.flag() == 0 {continue};
 
-            if tag != pshm.tag as i32 {
-                println!("{}/{}: -> recv fail, tag {tag} != {}", Self::rank(), Self::size(), pshm.tag);
+            if tag != cell.tag as i32 {
+                println!("{}/{}: -> recv fail, tag {tag} != {}", Self::rank(), Self::size(), cell.tag);
                 return !MPI_SUCCESS;
             }
 
-            if cnt < pshm.len {
-                println!("{}/{}: -> recv fail, length {cnt} < {}", Self::rank(), Self::size(), pshm.len);
+            if cnt < cell.len {
+                println!("{}/{}: -> recv fail, length {cnt} < {}", Self::rank(), Self::size(), cell.len);
                 return !MPI_SUCCESS;
             }
 
-            let mut length = pshm.len;
+            let mut length = cell.len;
             if length == 0 {
-                pshm.setFlag(pshm.nrecv as usize, 0);
+                cell.setFlag(0);
+                pshm.swapRecv();
             } else {
                 let mut pbuf = buf;
                 while length > 0 {
-                    while pshm.flags(pshm.nrecv as usize) == 0 {continue};
+                    while cell.flag() == 0 {continue};
 
-                    let ptr = (& pshm.buff[pshm.nrecv as usize]).as_ptr();
+                    let ptr = (& cell.buff).as_ptr();
                     let bytes = if (cnt as usize) < BufLen {cnt as usize} else {BufLen};
                     ptr.copy_to(pbuf as *mut i8, bytes);
-                    pshm.setFlag(pshm.nrecv as usize, 0);
-                    pshm.nrecv = !pshm.nrecv;
+                    cell.setFlag(0);
+                    pshm.swapRecv();
 
                     pbuf = pbuf.add(BufLen);
                     length -= BufLen as i32;
+                    cell = &mut pshm.cells[pshm.nrecv as usize];
                 }
 
                 pshm.nrecv = 0;
