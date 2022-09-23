@@ -32,7 +32,7 @@ fn main() {
     } else {
         unsafe {
             let buff = std::alloc::alloc(layout);
-            let mut status = MPI_Status{MPI_SOURCE: 0, MPI_ERROR: 0, MPI_TAG: 0};
+            let mut status = MPI_Status{MPI_SOURCE: 0, MPI_ERROR: 0, MPI_TAG: 0, cnt: 0};
             MPI_Recv(buff as *mut c_void, 15, MPI_BYTE, 0, 0, MPI_COMM_WORLD, &mut status);
 
             let data = CStr::from_ptr(buff as *const i8).to_str().unwrap();

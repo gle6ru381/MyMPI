@@ -151,7 +151,7 @@ impl MpiContext {
         return unsafe {context.mpiRank};
     }
 
-    pub fn send(buf : *mut c_void, cnt : i32, dtype : MPI_Datatype, dest : i32, tag : i32, comm : MPI_Comm) -> i32 {
+    pub fn send(buf : *const c_void, cnt : i32, dtype : MPI_Datatype, dest : i32, tag : i32, comm : MPI_Comm) -> i32 {
         unsafe {
             assert!(dest >= 0 && dest < Self::size() && dest != Self::rank());
             assert!(dtype == MPI_BYTE);
