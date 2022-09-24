@@ -8,6 +8,8 @@ fn main() {
     let argc = &mut tmp;
     let mut argv = (&mut[zstr!("my_mpi").as_ptr(), zstr!("-n").as_ptr(), zstr!("2").as_ptr()]).as_mut_ptr() as *mut*mut i8;
 
+    std::env::set_var("MPI_SIZE", "2");
+
     println!("MPI init");
 
     MPI_Init(argc, &mut argv);

@@ -1,5 +1,13 @@
-use crate::types::*;
+use crate::{types::*, MPI_CHECK, MPI_CHECK_COMM};
 use crate::shm::MpiContext as Context;
+use crate::errhandle::*;
+use crate::comm::*;
+
+pub (crate) fn p_mpi_abort(comm : MPI_Comm, code : i32) {
+    Context::deinit();
+
+    std::process::exit(-1);
+}
 
 #[no_mangle]
 pub extern "C" fn MPI_Init(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32
@@ -10,33 +18,68 @@ pub extern "C" fn MPI_Init(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32
             return !MPI_SUCCESS;
     }
 
-    if Context::parseArgs(pargc, pargv) != MPI_SUCCESS || Context::allocate() != MPI_SUCCESS || Context::mpi_split(0, Context::size()) != MPI_SUCCESS {
-        println!("{}/{}: -> failure", Context::rank(), Context::size());
-        return !MPI_SUCCESS;
+    MPI_CHECK!(!Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
+    MPI_CHECK!(!pargc.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
+    MPI_CHECK!(!pargv.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
+
+    let mut code = p_mpi_errh_init(pargc, pargv);
+    if code != MPI_SUCCESS {
+        return p_mpi_call_errhandler(MPI_COMM_WORLD, code);
     }
 
-    Context::init();
+    code = Context::init(pargc, pargv);
+    if code != MPI_SUCCESS {
+        println!("{}/{}: -> failure", Context::rank(), Context::size());
+        return p_mpi_call_errhandler(MPI_COMM_WORLD, code);
+    }
+
+    code = p_mpi_comm_init(pargc, pargv);
+    if code != MPI_SUCCESS {
+        return p_mpi_call_errhandler(MPI_COMM_WORLD, code);
+    }
+
+    Context::finish_init();
 
     println!("{}/{}: -> success", Context::rank(), Context::size());
 
-    return MPI_SUCCESS;
+    MPI_SUCCESS
 }
 
 #[no_mangle]
 pub extern "C" fn MPI_Finalize() -> i32
 {
-    if Context::is_init() {return MPI_SUCCESS};
+    MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
 
-    Context::deinit();
+    let mut code = p_mpi_comm_finit();
+    if code != MPI_SUCCESS {
+        return p_mpi_call_errhandler(MPI_COMM_WORLD, code);
+    }
+
+    code = Context::deinit();
+    if code != MPI_SUCCESS {
+        return p_mpi_call_errhandler(MPI_COMM_WORLD, code);
+    }
+
+    code = p_mpi_errh_fini();
+    if code != MPI_SUCCESS {
+        return p_mpi_call_errhandler(MPI_COMM_WORLD, code);
+    }
+
+    Context::finish_deinit();
 
     println!("{}/{}: -> finalize", Context::rank(), Context::size());
 
-    return MPI_SUCCESS;
+    MPI_SUCCESS
 }
 
 #[no_mangle]
 pub extern "C" fn MPI_Abort(comm : MPI_Comm, code : i32) -> i32
 {
+    MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
+    MPI_CHECK_COMM!(comm);
+
+    p_mpi_abort(comm, code);
+
     MPI_SUCCESS
 }
 

@@ -5,6 +5,13 @@ pub type MPI_Comm = i32;
 pub type MPI_Op = i32;
 pub type MPI_Errhandler = i32;
 
+#[macro_export]
+macro_rules! cstr {
+    ($cstr:literal) => {
+        zstr!($cstr).as_ptr()
+    };
+}
+
 pub struct MPI_Status {
     pub MPI_SOURCE : i32,
     pub MPI_TAG : i32,

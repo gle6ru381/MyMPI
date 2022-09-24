@@ -1,11 +1,23 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
-use std::{ffi::CStr, ptr::{read_volatile, write_volatile}};
+use std::{ffi::CStr, ptr::{read_volatile, write_volatile}, mem::size_of};
 use libc::c_void;
 
 use crate::types::*;
 
-const BufLen : usize = 4096;
+macro_rules! field_size {
+    ($t:ident :: $field:ident) => {{
+        let m = core::mem::MaybeUninit::<$t>::uninit();
+        let p = unsafe {
+            core::ptr::addr_of!((*(&m as *const _ as *const $t)).$field)
+        };
+
+        const fn size_of_raw<T>(_: *const T) -> usize {
+            core::mem::size_of::<T>()
+        }
+        size_of_raw(p)
+    }};
+}
 
 struct ShmCell {
     pub len : i32,
@@ -16,12 +28,19 @@ struct ShmCell {
 }
 
 impl ShmCell {
+    #[inline(always)]
     pub fn flag(& self) -> i8 {
         return unsafe {read_volatile::<i8>(&self.m_flag)};
     }
+
+    #[inline(always)]
     pub fn setFlag(&mut self, val : i8) {
         return unsafe {write_volatile(&mut self.m_flag, val)};
     }
+
+    pub const fn len() -> usize {
+        field_size!(ShmCell::buff)
+    } 
 }
 
 struct MpiShm {
@@ -54,7 +73,13 @@ static mut context : MpiContext = MpiContext{shm: ShmData{d: std::ptr::null_mut(
 
 impl MpiContext {
 
-    pub fn parseArgs(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32
+    fn get_env() {
+        let size = std::env::var("MPI_SIZE").unwrap_or(String::from("")).parse::<i32>().unwrap_or(0);
+        debug_assert!(size > 0);
+        unsafe {context.mpiSize = size};
+    }
+
+    fn parseArgs(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32
     {
         unsafe {
             let mut n : i32 = context.mpiSize;
@@ -99,14 +124,14 @@ impl MpiContext {
         return MPI_SUCCESS;
     }
 
-    pub fn allocate() -> i32 {
+    fn allocate() -> i32 {
         unsafe {
             context.shm.d = libc::mmap(std::ptr::null_mut(), std::mem::size_of::<MpiShm>() * (context.mpiSize * context.mpiSize) as usize, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_ANONYMOUS | libc::MAP_SHARED, -1, 0) as *mut MpiShm;
             return if context.shm.d as *mut c_void != libc::MAP_FAILED {MPI_SUCCESS} else {!MPI_SUCCESS};
         }
     }
 
-    pub fn mpi_split(rank : i32, size : i32) -> i32
+    fn mpi_split(rank : i32, size : i32) -> i32
     {
         unsafe {context.mpiRank = rank};
 
@@ -131,15 +156,42 @@ impl MpiContext {
         return unsafe { context.MpiInit };
     }
 
-    pub fn init() {
+    pub fn init(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32 {
         unsafe {
+            debug_assert!(!context.MpiInit);
+
+            Self::get_env();
+
+            if /*Self::parseArgs(pargc, pargv) != MPI_SUCCESS || */Self::allocate() != MPI_SUCCESS || Self::mpi_split(0, Self::size()) != MPI_SUCCESS {
+                return MPI_ERR_INTERN;
+            }
+        }
+        MPI_SUCCESS
+    }
+
+    pub fn finish_init() {
+        unsafe {
+            debug_assert!(!context.MpiInit);
+
             context.MpiInit = true;
         }
     }
 
-    pub fn deinit() {
+    pub fn deinit() -> i32 {
         unsafe {
-            context.MpiInit = false;
+            debug_assert!(context.MpiInit);
+        }
+
+        MPI_SUCCESS
+    }
+
+    pub fn finish_deinit() {
+        {
+            unsafe {
+                debug_assert!(context.MpiInit);
+
+                context.MpiInit = false;
+            }
         }
     }
 
@@ -178,14 +230,14 @@ impl MpiContext {
                     }
 
                     let ptr = (&mut cell.buff).as_mut_ptr();
-                    let bytes = if (len as usize) < BufLen {cnt as usize} else {BufLen};
+                    let bytes = if (len as usize) < ShmCell::len() {cnt as usize} else {ShmCell::len()};
 
                     ptr.copy_from(pbuf as *const i8, bytes);
                     cell.setFlag(1);
                     pshm.swapSend();
 
-                    pbuf = pbuf.add(BufLen);
-                    len -= BufLen as i32;
+                    pbuf = pbuf.add(ShmCell::len());
+                    len -= ShmCell::len() as i32;
                     cell = &mut pshm.cells[pshm.nsend as usize];
                 }
                 pshm.nsend = 0;
@@ -222,13 +274,13 @@ impl MpiContext {
                     while cell.flag() == 0 {continue};
 
                     let ptr = (& cell.buff).as_ptr();
-                    let bytes = if (cnt as usize) < BufLen {cnt as usize} else {BufLen};
+                    let bytes = if (cnt as usize) < ShmCell::len() {cnt as usize} else {ShmCell::len()};
                     ptr.copy_to(pbuf as *mut i8, bytes);
                     cell.setFlag(0);
                     pshm.swapRecv();
 
-                    pbuf = pbuf.add(BufLen);
-                    length -= BufLen as i32;
+                    pbuf = pbuf.add(ShmCell::len());
+                    length -= ShmCell::len() as i32;
                     cell = &mut pshm.cells[pshm.nrecv as usize];
                 }
 
