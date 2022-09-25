@@ -1,5 +1,5 @@
 use crate::{types::*, MPI_CHECK, MPI_CHECK_COMM, MPI_CHECK_ERRH};
-use crate::shm::MpiContext as Context;
+use crate::context::Context;
 use crate::errhandle::*;
 
 const CTXT_INC : i32 = 2;

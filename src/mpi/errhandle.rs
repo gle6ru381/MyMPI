@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use crate::shm::MpiContext as Context;
+use crate::context::Context;
 use crate::{types::*, cstr, p_mpi_abort, CommGroup};
 use zstr::zstr;
 

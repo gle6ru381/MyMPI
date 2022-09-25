@@ -12,6 +12,7 @@ macro_rules! cstr {
     };
 }
 
+#[derive(Clone, Copy)]
 pub struct MPI_Status {
     pub MPI_SOURCE : i32,
     pub MPI_TAG : i32,
@@ -19,15 +20,42 @@ pub struct MPI_Status {
     pub cnt : i32
 }
 
-pub struct MPI_Request {
-    buf : *mut c_void,
-    stat : MPI_Status,
-    comm : MPI_Comm,
-    flag : i32,
-    tag : i32,
-    cnt : i32,
-    rank : i32
+impl Default for MPI_Status {
+    fn default() -> Self {
+        Self::new()
+    }
 }
+
+impl MPI_Status {
+    pub const fn new() -> Self {
+        MPI_Status { MPI_SOURCE: 0, MPI_TAG: 0, MPI_ERROR: 0, cnt: 0 }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct P_MPI_Request {
+    pub buf : *mut c_void,
+    pub stat : MPI_Status,
+    pub comm : MPI_Comm,
+    pub flag : i32,
+    pub tag : i32,
+    pub cnt : i32,
+    pub rank : i32
+}
+
+impl Default for P_MPI_Request {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl P_MPI_Request {
+    pub const fn new() -> Self {
+        P_MPI_Request { buf: std::ptr::null_mut(), stat: MPI_Status::new(), comm: 0, flag: 0, tag: 0, cnt: 0, rank: 0 }
+    }
+}
+
+pub type MPI_Request = *mut P_MPI_Request;
 
 pub const MPI_UNDEFINED : i32 = -1;
 
