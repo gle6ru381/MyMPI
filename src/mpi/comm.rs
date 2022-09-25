@@ -105,10 +105,42 @@ impl CommGroup {
     }
 }
 
-pub (crate) fn p_mpi_check_comm(comm : MPI_Comm) 
+pub (crate) fn p_mpi_check_comm(comm : MPI_Comm) -> i32
 {
     unsafe {
-        MPI_CHECK!(comm >= 0 && comm < GROUP.comms.len() as i32, MPI_COMM_WORLD, MPI_ERR_COMM);
+        MPI_CHECK!(comm >= 0 && comm < GROUP.comms.len() as i32, MPI_COMM_WORLD, MPI_ERR_COMM)
+    }
+}
+
+pub (crate) fn p_mpi_check_rank(rank : i32, comm : MPI_Comm) -> i32
+{
+    let code = MPI_CHECK_COMM!(comm);
+    if code != MPI_SUCCESS {
+        return code;
+    }
+
+    unsafe {
+        MPI_CHECK!(rank >= 0 && rank < GROUP.comms[comm as usize].prank.len() as i32, comm, MPI_ERR_RANK)
+    }
+}
+
+pub (crate) fn p_mpi_get_grank(comm : MPI_Comm, lrank : i32) -> i32 {
+    debug_assert!(Context::is_init());
+    MPI_CHECK_COMM!(comm);
+    unsafe {
+        debug_assert!(lrank >= 0 && lrank < GROUP.comms[comm as usize].prank.len() as i32);
+
+        GROUP.comms[comm as usize].prank[lrank as usize]
+    }
+}
+
+pub (crate) fn p_mpi_get_gtag(comm : MPI_Comm, ltag : i32) -> i32 {
+    debug_assert!(Context::is_init());
+    MPI_CHECK_COMM!(comm);
+    debug_assert!(ltag >= 0 && ltag <= 32767);
+
+    unsafe {
+        (GROUP.comms[comm as usize].ctxt << 16) | (ltag & 0x7FFF)
     }
 }
 

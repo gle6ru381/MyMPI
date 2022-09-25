@@ -91,4 +91,6 @@ pub const MPI_ERR_UNKNOWN : i32 = 11;
 pub const MPI_ERR_TRUNCATE : i32 = 12;
 pub const MPI_ERR_OTHER : i32 = 13;
 pub const MPI_ERR_INTERN : i32 = 14;
-pub const MPI_ERR_LASTCODE : i32 = 14;
+pub const MPI_ERR_PENDING : i32 = 15;
+pub const MPI_ERR_IN_STATUS : i32 = 16;
+pub const MPI_ERR_LASTCODE : i32 = 16;

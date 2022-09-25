@@ -1,9 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
-use std::{ptr::{read_volatile, write_volatile, null, null_mut}, mem::size_of, collections::HashSet};
-use libc::c_void;
-
-use crate::{types::*, context::Context};
+use std::{ptr::{read_volatile, write_volatile, null_mut}, mem::size_of};
+use crate::private::*;
 
 macro_rules! field_size {
     ($t:ident :: $field:ident) => {{
@@ -20,11 +18,11 @@ macro_rules! field_size {
 }
 
 struct Cell {
-    pub len : i32,
-    pub tag : i16,
-    m_flag : i8,
-    pub pad : i8,
-    pub buff : [i8; 4096],
+    pub len : i32, // 4
+    pub tag : i32, // 8
+    m_flag : i8, // 9
+    pub pad : [i8; 3], // 12
+    pub buff : [i8; 4084], // 4096
 }
 
 impl Cell {
@@ -86,71 +84,6 @@ impl MpiShm {
     }
 }
 
-struct RequestQueue {
-    reqs : [P_MPI_Request; 1],
-    fill : i32
-}
-
-impl Default for RequestQueue {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl RequestQueue {
-    pub const fn new () -> Self {
-        RequestQueue { reqs: [P_MPI_Request::new(); 1], fill: 0 }
-    }
-
-    #[inline(always)]
-    pub fn find_by_tag(&mut self, rank : i32, tag : i32) -> MPI_Request {
-        let val = self.requests().iter().position(|x| x.rank == rank && x.tag == tag );
-        return if val.is_none() {null_mut()} else {&mut self.reqs[val.unwrap()]}
-    }
-
-    #[inline(always)]
-    pub fn find_mut(&mut self, req : MPI_Request) -> MPI_Request {
-       let val = self.requests().iter().position(|x| x as *const P_MPI_Request == req);
-       return if val.is_none() {null_mut()} else {&mut self.reqs[val.unwrap()]}
-    }
-
-    #[inline(always)]
-    pub fn find(&self, req : MPI_Request) -> *const P_MPI_Request {
-        let val = self.requests_const().iter().find(|&x| x as *const P_MPI_Request == req);
-        return if val.is_none() {null_mut()} else {val.unwrap()}
-    }
-
-    #[inline(always)]
-    pub fn contains(&self, req : MPI_Request) -> bool {
-        return self.find(req) != null_mut();
-    }
-
-    #[inline(always)]
-    pub fn get(&mut self) -> MPI_Request {
-        if self.fill < 1 {
-            let idx = self.fill as usize;
-            self.fill += 1;
-            return &mut self.reqs[idx];
-        }
-        return null_mut();
-    }
-
-    #[inline(always)]
-    pub fn free(&mut self, req : MPI_Request) {
-        self.fill = 0;
-    }
-
-    #[inline(always)]
-    pub fn requests(&mut self) -> &mut [P_MPI_Request] {
-        &mut self.reqs[..self.fill as usize]
-    }
-    
-    #[inline(always)]
-    pub fn requests_const(&self) -> &[P_MPI_Request] {
-        &self.reqs[..self.fill as usize]
-    }
-}
-
 pub struct ShmData {
     d : *mut MpiShm,
     recv_queue : RequestQueue,
@@ -162,13 +95,13 @@ unsafe impl Sync for ShmData {}
 
 impl ShmData {
     fn find_queue(&mut self, req : MPI_Request) -> &mut RequestQueue {
-        if &self.recv_queue.reqs[0] as *const P_MPI_Request == req {
+        if self.recv_queue.contains(req) {
             return &mut self.recv_queue;
         }
-        if &self.send_queue.reqs[0] as *const P_MPI_Request == req {
+        if self.send_queue.contains(req) {
             return &mut self.send_queue;
         }
-        if &self.unexp_queue.reqs[0] as *const P_MPI_Request == req {
+        if self.unexp_queue.contains(req) {
             return &mut self.unexp_queue;
         }
 
@@ -176,28 +109,34 @@ impl ShmData {
     }
 
     pub const fn new() -> ShmData {
-        ShmData { d: std::ptr::null_mut(), recv_queue: RequestQueue::new(), send_queue: RequestQueue::new(), unexp_queue: RequestQueue::new() }
+        ShmData { d: null_mut(), recv_queue: RequestQueue::new_c(), send_queue: RequestQueue::new_c(), unexp_queue: RequestQueue::new_c() }
     }
 
-    pub fn get_send(&mut self) -> MPI_Request {
-        self.send_queue.get()
+    #[inline(always)]
+    pub fn get_send(&mut self) -> Option<&mut P_MPI_Request> {
+        println!("New send req");
+        self.send_queue.push()
     }
 
-    pub fn get_recv(&mut self) -> MPI_Request {
-        self.recv_queue.get()
+    #[inline(always)]
+    pub fn get_recv(&mut self) -> Option<&mut P_MPI_Request> {
+        println!("New recv req");
+        self.recv_queue.push()
     }
 
+    #[inline(always)]
     pub fn find_unexp(&mut self, rank : i32, tag : i32) -> MPI_Request {
         self.unexp_queue.find_by_tag(rank, tag)
     }
 
     pub fn free_req(&mut self, req : MPI_Request,  preq : MPI_Request) {
-        self.find_queue(req).free(preq);
+        println!("Free req for {}", Context::rank());
+        self.find_queue(req).erase_ptr(preq)
     }
 
     pub fn allocate(&mut self) -> i32 {
         unsafe {
-            self.d = libc::mmap(std::ptr::null_mut(), size_of::<MpiShm>() * (Context::size() * Context::size()) as usize, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_ANONYMOUS | libc::MAP_SHARED, -1, 0) as *mut MpiShm;
+            self.d = libc::mmap(null_mut(), size_of::<MpiShm>() * (Context::size() * Context::size()) as usize, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_ANONYMOUS | libc::MAP_SHARED, -1, 0) as *mut MpiShm;
             if self.d as *mut c_void == libc::MAP_FAILED {
                 return !MPI_SUCCESS;
             }
@@ -216,16 +155,16 @@ impl ShmData {
     }
 
     pub fn progress(&mut self) -> i32 {
-        println!("Call progress for {}, send: {}, recv: {}", Context::rank(), self.send_queue.requests().len(), self.recv_queue.requests().len());
         let d = unsafe {&mut *(self as *mut Self)};
-        for req in d.recv_queue.requests() {
+
+        for req in d.recv_queue.iter_mut() {
             let rc = Self::recv_progress(self as *mut Self, req);
             if rc != MPI_SUCCESS {
                 return rc;
             }
         }
 
-        for req in d.send_queue.requests() {
+        for req in d.send_queue.iter_mut() {
             let rc = Self::send_progress(self as *mut Self, req);
             if rc != MPI_SUCCESS {
                 return rc;
@@ -251,9 +190,9 @@ impl ShmData {
         let mut unexp = false;
         if req.tag != pshm.recv_cell().tag as i32 {
             println!("Find enexpect");
-            let preqx = d.unexp_queue.get();
-            if !preqx.is_null() {
-                let reqx = unsafe {&mut *preqx};
+            let preqx = d.unexp_queue.push();
+            if preqx.is_some() {
+                let reqx = unsafe {preqx.unwrap_unchecked()};
                 reqx.rank = req.rank;
                 reqx.tag = pshm.recv_cell().tag as i32;
                 reqx.cnt = pshm.recv_cell().len;
@@ -313,8 +252,6 @@ impl ShmData {
             return MPI_SUCCESS
         }
 
-        println!("Shm send progress");
-
         let d = unsafe {&mut *this};
         let pshm = unsafe {d.d.add((Context::rank() * Context::size() + req.rank) as usize).as_mut().unwrap_unchecked()};
 
@@ -323,6 +260,7 @@ impl ShmData {
         let mut length = req.cnt as usize;
         let mut buf = req.buf;
         pshm.send_cell().len = req.cnt;
+        pshm.send_cell().tag = req.tag;
         println!("Send length: {length}");
 
         while length > Cell::buf_len() {

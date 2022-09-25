@@ -10,6 +10,7 @@ mod errhandle;
 mod collectives;
 mod base;
 mod context;
+mod reqqueue;
 
 pub use types::*;
 pub use comm::*;

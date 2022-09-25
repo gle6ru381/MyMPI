@@ -1,5 +1,9 @@
-use crate::types::*;
+use crate::{types::*, private::*, MPI_CHECK};
 use std::ffi::c_void;
+
+pub (crate) fn p_mpi_check_op(op : MPI_Op, comm : MPI_Comm) -> i32 {
+    MPI_CHECK!(op == MPI_MAX || op == MPI_MIN || op == MPI_SUM, comm, MPI_ERR_OP)
+}
 
 #[no_mangle]
 pub extern "C" fn MPI_Barrier(comm : MPI_Comm) -> i32 {

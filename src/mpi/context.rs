@@ -1,4 +1,4 @@
-use crate::{shm::ShmData, p_mpi_errh_init, p_mpi_comm_init, MPI_CHECK, MPI_CHECK_COMM};
+use crate::{shm::ShmData, p_mpi_errh_init, p_mpi_comm_init, MPI_CHECK, MPI_CHECK_COMM, MPI_CHECK_RANK, MPI_CHECK_TYPE, p_mpi_get_grank, p_mpi_get_gtag};
 use std::{ffi::CStr, slice::from_raw_parts_mut};
 pub use crate::types::*;
 use crate::private::*;
@@ -142,17 +142,24 @@ impl Context {
         unsafe {context.mpi_init}
     }
 
-    pub fn send(buf : *const c_void, cnt : i32, dtype : MPI_Datatype, dest : i32, tag : i32, comm : MPI_Comm, preq : *mut MPI_Request) -> i32 {
+    pub fn send(buf : *const c_void, mut cnt : i32, dtype : MPI_Datatype, mut dest : i32, mut tag : i32, comm : MPI_Comm, preq : *mut MPI_Request) -> i32 {
         MPI_CHECK!(Self::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
         MPI_CHECK_COMM!(comm);
         MPI_CHECK!(!buf.is_null(), comm, MPI_ERR_BUFFER);
         MPI_CHECK!(!preq.is_null(), comm, MPI_ERR_REQUEST);
         MPI_CHECK!(cnt >= 0, comm, MPI_ERR_COUNT);
+        MPI_CHECK_TYPE!(dtype, comm);
+        MPI_CHECK_RANK!(dest, comm);
+
+        cnt *= p_mpi_type_size(dtype);
+        dest = p_mpi_get_grank(comm, dest);
 
         MPI_CHECK!(dest != Self::rank(), comm, MPI_ERR_INTERN);
         MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG);
 
-        println!("Send call");
+        tag = p_mpi_get_gtag(comm, tag);
+
+        println!("Send call to {dest} with tag {tag}");
 
         let code = unsafe {context.shm.progress()};
         if code != MPI_SUCCESS {
@@ -160,8 +167,9 @@ impl Context {
         }
 
         unsafe {
-            *preq = context.shm.get_send();
-            if !(*preq).is_null() {
+            let oreq = context.shm.get_send();
+            if oreq.is_some() {
+                *preq = oreq.unwrap_unchecked();
                 let req = &mut **preq;
                 req.buf = buf as *mut c_void;
                 req.cnt = cnt;
@@ -171,22 +179,31 @@ impl Context {
                 req.flag = 0;
 
                 return MPI_SUCCESS;
+            } else {
+                *preq = null_mut();
             }
         }
         p_mpi_call_errhandler(comm, MPI_ERR_INTERN)
     }
 
-    pub fn recv(buf : *mut c_void, cnt : i32, dtype : MPI_Datatype, src: i32, tag : i32, comm : MPI_Comm, preq : *mut MPI_Request) -> i32 {
+    pub fn recv(buf : *mut c_void, mut cnt : i32, dtype : MPI_Datatype, mut src: i32, mut tag : i32, comm : MPI_Comm, preq : *mut MPI_Request) -> i32 {
         MPI_CHECK!(Self::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
         MPI_CHECK_COMM!(comm);
         MPI_CHECK!(!buf.is_null(), comm, MPI_ERR_BUFFER);
         MPI_CHECK!(!preq.is_null(), comm, MPI_ERR_REQUEST);
         MPI_CHECK!(cnt >= 0, comm, MPI_ERR_COUNT);
+        MPI_CHECK_TYPE!(dtype, comm);
+        MPI_CHECK_RANK!(src, comm);
+
+        cnt *= p_mpi_type_size(dtype);
+        src = p_mpi_get_grank(comm, src);
 
         MPI_CHECK!(src != Self::rank(), comm, MPI_ERR_INTERN);
         MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG);
 
-        println!("Recv call");
+        tag = p_mpi_get_gtag(comm, tag);
+
+        println!("Recv call from {src} with tag {tag}");
 
         unsafe {
             let code = context.shm.progress();
@@ -214,8 +231,9 @@ impl Context {
 
                 return MPI_SUCCESS;
             } else {
-                *preq = context.shm.get_recv();
-                if !(*preq).is_null() {
+                let oreq = context.shm.get_recv();
+                if oreq.is_some() {
+                    *preq = oreq.unwrap_unchecked();
                     let req = &mut **preq;
                     
                     req.buf = buf;
@@ -226,6 +244,8 @@ impl Context {
                     req.flag = 0;
 
                     return MPI_SUCCESS;
+                } else {
+                    *preq = null_mut();
                 }
             }
         }
@@ -283,7 +303,7 @@ impl Context {
 
         let stat = unsafe {from_raw_parts_mut(pstat, cnt as usize)};
         for i in &mut stat[..] {
-            i.MPI_ERROR = MPI_ERR_OTHER;
+            i.MPI_ERROR = MPI_ERR_PENDING;
         }
 
         let mut flag = 0;
@@ -291,11 +311,11 @@ impl Context {
 
         while flags != cnt {
             for (i, s) in stat.iter_mut().enumerate() {
-                if s.MPI_ERROR == MPI_ERR_OTHER {
+                if s.MPI_ERROR == MPI_ERR_PENDING {
                     let code = unsafe {Self::test(preq.add(i), &mut flag, pstat.add(i))};
                     if code != MPI_SUCCESS {
                         stat[i].MPI_ERROR = code;
-                        return MPI_ERR_INTERN;
+                        return MPI_ERR_IN_STATUS;
                     }
 
                     if flag != 0 {

@@ -5,29 +5,98 @@ use crate::{types::*, cstr, p_mpi_abort, CommGroup};
 use zstr::zstr;
 
 #[macro_export]
+#[cfg(debug_assertions)]
 macro_rules! MPI_CHECK {
-    ($exp:expr, $comm:tt, $code:tt) => {
-        if std::cfg!(debug_assertions) {
-            if $exp {MPI_SUCCESS} else {p_mpi_call_errhandler($comm, $code)};
-        }
+    ($exp:expr, $comm:expr, $code:expr) => {
+        if $exp {MPI_SUCCESS} else {p_mpi_call_errhandler($comm, $code)}
     };
 }
 
 #[macro_export]
+#[cfg(not(debug_assertions))]
+macro_rules! MPI_CHECK {
+    ($expr:expr, $comm:expr, $code:expr) => {
+        MPI_SUCCESS
+    }
+}
+
+#[macro_export]
+#[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_COMM {
-    ($comm:tt) => {
-        if std::cfg!(debug_assertions) {
-            p_mpi_check_comm($comm);
-        }
+    ($comm:expr) => {
+        p_mpi_check_comm($comm)
     };
 }
 
 #[macro_export]
+#[cfg(not(debug_assertions))]
+macro_rules! MPI_CHECK_COMM {
+    ($comm:expr) => {
+        MPI_SUCCESS
+    };
+}
+
+#[macro_export]
+#[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_ERRH {
     ($comm:tt, $errh:tt) => {
-        if std::cfg!(debug_assertions) {
-            p_mpi_check_errh($comm, $errh);
-        }
+        p_mpi_check_errh($comm, $errh)
+    };
+}
+
+#[macro_export]
+#[cfg(not(debug_assertions))]
+macro_rules! MPI_CHECK_ERRH {
+    () => {
+        
+    };
+}
+
+#[macro_export]
+#[cfg(debug_assertions)]
+macro_rules! MPI_CHECK_RANK {
+    ($rank:expr, $comm:expr) => {
+        p_mpi_check_rank($rank, $comm)
+    };
+}
+
+#[macro_export]
+#[cfg(not(debug_assertions))]
+macro_rules! MPI_CHECK_RANK {
+    ($rank:expr, $comm:expr) => {
+        MPI_SUCCESS
+    };
+}
+
+#[macro_export]
+#[cfg(debug_assertions)]
+macro_rules! MPI_CHECK_TYPE {
+    ($dtype:expr, $comm:expr) => {
+        p_mpi_check_type($dtype, $comm)
+    };
+}
+
+#[macro_export]
+#[cfg(not(debug_assertions))]
+macro_rules! MPI_CHECK_TYPE {
+    ($dtype:expr, $comm:expr) => {
+        MPI_SUCCESS
+    };
+}
+
+#[macro_export]
+#[cfg(debug_assertions)]
+macro_rules! MPI_CHECK_OP {
+    ($op:expr, $comm:expr) => {
+        p_mpi_check_op($op, $comm)
+    };
+}
+
+#[macro_export]
+#[cfg(not(debug_assertions))]
+macro_rules! MPI_CHECK_OP {
+    ($op:expr, $comm:expr) => {
+        MPI_SUCCESS
     };
 }
 
@@ -52,6 +121,7 @@ type ErrHandler = fn(&MPI_Comm, &mut i32);
 const ERRH_MAX : i32 = 2;
 
 pub (crate) fn p_mpi_errors_are_fatal(pcomm : &MPI_Comm, pcode : &mut i32) {
+    println!("MPI fatal error for {}", Context::rank());
     p_mpi_abort(*pcomm, *pcode);
 }
 
