@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
-use std::{ptr::{read_volatile, write_volatile, null_mut}, mem::size_of};
+use std::{ptr::{read_volatile, write_volatile, null_mut}, mem::size_of, borrow::Borrow};
 use crate::private::*;
 
 macro_rules! field_size {
@@ -37,6 +37,7 @@ impl Cell {
 
     #[inline(always)]
     pub fn setFlag(&mut self, val : i8) {
+        println!("{} Set buffer flag: {val}", Context::rank());
         return unsafe {write_volatile(&mut self.m_flag, val)};
     }
 
@@ -59,18 +60,17 @@ struct MpiShm {
 
 impl MpiShm {
     #[inline(always)]
-    fn p_swap(nsend : &mut i8, size : i8) {
-        *nsend = (*nsend + 1) % size;
-    }
-
-    #[inline(always)]
     pub fn swapSend(&mut self) {
-        Self::p_swap(&mut self.nsend, self.cells.len() as i8);
+        print!("{} Swap send buffer: {} on ", Context::rank(), self.nsend);
+        self.nsend = (self.nsend + 1) % self.cells.len() as i8;
+        println!("{}", self.nsend);
     }
 
     #[inline(always)]
     pub fn swapRecv(&mut self) {
+        print!("{} Swap recv buffer: {} on ", Context::rank(), self.nrecv);
         self.nrecv = (self.nrecv + 1) % self.cells.len() as i8;
+        println!("{}", self.nrecv);
     }
 
     #[inline(always)]
@@ -113,14 +113,12 @@ impl ShmData {
     }
 
     #[inline(always)]
-    pub fn get_send(&mut self) -> Option<&mut P_MPI_Request> {
-        println!("New send req");
-        self.send_queue.push()
+    pub fn get_send(&mut self) -> Option<& mut P_MPI_Request> {
+       self.send_queue.push()
     }
 
     #[inline(always)]
     pub fn get_recv(&mut self) -> Option<&mut P_MPI_Request> {
-        println!("New recv req");
         self.recv_queue.push()
     }
 
@@ -130,8 +128,7 @@ impl ShmData {
     }
 
     pub fn free_req(&mut self, req : MPI_Request,  preq : MPI_Request) {
-        println!("Free req for {}", Context::rank());
-        self.find_queue(req).erase_ptr(preq)
+        self.find_queue(req).erase_ptr(preq);
     }
 
     pub fn allocate(&mut self) -> i32 {
@@ -175,12 +172,10 @@ impl ShmData {
     }
 
     #[inline(always)]
-    fn recv_progress(this : *mut Self, req : &mut P_MPI_Request) -> i32 {
+    fn recv_progress(this : *mut Self, mut req : &mut P_MPI_Request) -> i32 {
         if req.flag != 0 {
             return MPI_SUCCESS
         }
-
-        println!("Shm recv progress");
 
         let d = unsafe {&mut *this};
         let pshm = unsafe {d.d.add((req.rank * Context::size() + Context::rank()) as usize).as_mut().unwrap()};
@@ -189,13 +184,15 @@ impl ShmData {
 
         let mut unexp = false;
         if req.tag != pshm.recv_cell().tag as i32 {
-            println!("Find enexpect");
+            println!("##{} Find unexpect", Context::rank());
             let preqx = d.unexp_queue.push();
             if preqx.is_some() {
                 let reqx = unsafe {preqx.unwrap_unchecked()};
                 reqx.rank = req.rank;
                 reqx.tag = pshm.recv_cell().tag as i32;
                 reqx.cnt = pshm.recv_cell().len;
+
+                req = reqx;
 
                 unexp = true;
             } else {
@@ -207,6 +204,7 @@ impl ShmData {
             let layout = std::alloc::Layout::from_size_align(req.cnt as usize, 1).unwrap();
             let buf = unsafe {std::alloc::alloc(layout)};
             if buf.is_null() {
+                println!("Error allocate unexpected buffer");
                 return MPI_ERR_OTHER;
             }
             req.buf = buf as *mut c_void;
@@ -242,6 +240,8 @@ impl ShmData {
         req.stat.MPI_TAG = req.tag;
         req.stat.cnt = req.cnt;
         req.flag = 1;
+
+        println!("Success recover for {}, buffer: {}", Context::rank(), req.buf.is_null());
 
         MPI_SUCCESS
     }
@@ -285,6 +285,8 @@ impl ShmData {
         req.stat.MPI_TAG = req.tag;
         req.stat.cnt = req.cnt;
         req.flag = 1;
+
+        println!("Success send for {}", Context::rank());
 
         MPI_SUCCESS
     }

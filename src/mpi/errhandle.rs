@@ -100,6 +100,16 @@ macro_rules! MPI_CHECK_OP {
     };
 }
 
+#[macro_export]
+macro_rules! CHECK_RET {
+    ($e:expr) => {
+        let code = $e;
+        if code != MPI_SUCCESS {
+            return code;
+        }
+    };
+}
+
 const ERR_STRINGS : &'static [*const i8] = &[
     cstr!("success"),
     cstr!("wrong buffer"),

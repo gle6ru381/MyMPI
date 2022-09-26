@@ -11,6 +11,8 @@ mod collectives;
 mod base;
 mod context;
 mod reqqueue;
+mod debug;
+mod reducefuc;
 
 pub use types::*;
 pub use comm::*;

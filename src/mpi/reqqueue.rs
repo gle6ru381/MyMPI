@@ -39,6 +39,7 @@ impl<T, const N : usize> Queue<T, N> where T: Clone + Copy + Default {
             return Some(&mut self.queue[0]);
         } else if self.size < N {
             self.tail = (self.tail + 1) % N;
+            self.flags[self.tail] = true;
             self.size += 1;
             return Some(&mut self.queue[self.tail]);
         }
@@ -84,7 +85,9 @@ impl<T, const N : usize> Queue<T, N> where T: Clone + Copy + Default {
 
     #[inline(always)]
     pub fn erase_ptr(&mut self, ptr : *const T) {
-        self.erase(ptr as usize - self.queue.as_ptr() as usize)
+        unsafe {
+            self.erase(ptr.offset_from(self.queue.as_ptr()) as usize)
+        }
     }
 
     #[inline(always)]
@@ -126,13 +129,13 @@ impl<'a, T, const N : usize> Iterator for Iter<'a, T, N> {
             let mut idx = unsafe {(res.unwrap_unchecked() as *const T).offset_from(self.q.queue.as_ptr()) as usize};
             loop {
                 idx = (idx + 1) % N;
-                if self.q.flags[idx] {
-                    self.item = Some(&self.q.queue[idx]);
+                if self.q.tail == idx {
+                    self.item = None;
                     break;
                 }
 
-                if self.q.tail == idx {
-                    self.item = None;
+                if self.q.flags[idx] {
+                    self.item = Some(&self.q.queue[idx]);
                     break;
                 }
             }
@@ -160,15 +163,16 @@ impl<'a, T, const N : usize> Iterator for IterMut<'a, T, N> where T : Copy {
         let q = unsafe {self.pq.as_mut()};
         if q.size > 1 {
             let mut idx = unsafe {res.offset_from(q.queue.as_ptr()) as usize};
+
             loop {
                 idx = (idx + 1) % N;
-                if q.flags[idx] {
-                    self.item = Some(&mut q.queue[idx]);
+                if q.head == idx {
+                    self.item = None;
                     break;
                 }
 
-                if q.tail == idx {
-                    self.item = None;
+                if q.flags[idx] {
+                    self.item = Some(&mut q.queue[idx]);
                     break;
                 }
             }

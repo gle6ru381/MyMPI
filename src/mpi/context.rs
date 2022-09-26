@@ -1,4 +1,4 @@
-use crate::{shm::ShmData, p_mpi_errh_init, p_mpi_comm_init, MPI_CHECK, MPI_CHECK_COMM, MPI_CHECK_RANK, MPI_CHECK_TYPE, p_mpi_get_grank, p_mpi_get_gtag};
+use crate::{shm::ShmData, p_mpi_errh_init, p_mpi_comm_init, MPI_CHECK, MPI_CHECK_COMM, MPI_CHECK_RANK, MPI_CHECK_TYPE};
 use std::{ffi::CStr, slice::from_raw_parts_mut};
 pub use crate::types::*;
 use crate::private::*;
@@ -152,14 +152,14 @@ impl Context {
         MPI_CHECK_RANK!(dest, comm);
 
         cnt *= p_mpi_type_size(dtype);
-        dest = p_mpi_get_grank(comm, dest);
+        dest = p_mpi_rank_map(comm, dest);
 
         MPI_CHECK!(dest != Self::rank(), comm, MPI_ERR_INTERN);
         MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG);
 
-        tag = p_mpi_get_gtag(comm, tag);
+        tag = p_mpi_tag_map(comm, tag);
 
-        println!("Send call to {dest} with tag {tag}");
+        debug!("Send call to {dest} with tag {tag}");
 
         let code = unsafe {context.shm.progress()};
         if code != MPI_SUCCESS {
@@ -196,14 +196,14 @@ impl Context {
         MPI_CHECK_RANK!(src, comm);
 
         cnt *= p_mpi_type_size(dtype);
-        src = p_mpi_get_grank(comm, src);
+        src = p_mpi_rank_map(comm, src);
 
         MPI_CHECK!(src != Self::rank(), comm, MPI_ERR_INTERN);
         MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG);
 
-        tag = p_mpi_get_gtag(comm, tag);
+        tag = p_mpi_tag_map(comm, tag);
 
-        println!("Recv call from {src} with tag {tag}");
+        debug!("Recv call from {src} with tag {tag} and size {cnt}");
 
         unsafe {
             let code = context.shm.progress();
@@ -212,10 +212,11 @@ impl Context {
             }
 
             *preq = context.shm.find_unexp(src, tag);
-            println!("Find unexp: {}", !(*preq).is_null());
             if !(*preq).is_null() {
                 let req = &mut **preq;
+                println!("Unexpect rank: {}, tag: {}", req.rank, req.tag);
                 if req.cnt > cnt {
+                    println!("Error truncate unexpect");
                     return p_mpi_call_errhandler(comm, MPI_ERR_TRUNCATE);
                 }
 
@@ -243,7 +244,7 @@ impl Context {
                     req.comm = comm;
                     req.flag = 0;
 
-                    return MPI_SUCCESS;
+                return MPI_SUCCESS;
                 } else {
                     *preq = null_mut();
                 }
@@ -268,12 +269,13 @@ impl Context {
                 let req = &mut **preq;
 
                 if req.flag != 0 {
+                    debug!("Find request with tag: {}, rank: {}", req.tag, req.rank);
                     *pflag = 1;
 
                     if !pstat.is_null() {
                         let stat = &mut *pstat;
-                        stat.MPI_SOURCE = req.stat.MPI_SOURCE;
-                        stat.MPI_TAG = req.stat.MPI_TAG;
+                        stat.MPI_SOURCE = p_mpi_rank_unmap(req.comm, req.stat.MPI_SOURCE);
+                        stat.MPI_TAG = p_mpi_tag_unmap(req.comm, req.stat.MPI_TAG);
                         stat.cnt = req.stat.cnt;
                     }
                     req.flag = 0;
