@@ -13,6 +13,7 @@ mod context;
 mod reqqueue;
 mod debug;
 mod reducefuc;
+pub mod memory;
 
 pub use types::*;
 pub use comm::*;
@@ -21,3 +22,203 @@ pub use metatypes::*;
 pub use errhandle::*;
 pub use collectives::*;
 pub use base::*;
+
+#[cfg(test)]
+mod tests {
+    use std::{alloc::{Layout, alloc, dealloc}, slice::from_raw_parts_mut, time::{Instant, Duration}};
+
+    use libc::c_void;
+
+    use crate::{memory::{ntcpy, xmmntcpy}, p_mpi_rank_unmap};
+
+    fn createArray() -> Vec<i32> {
+        return Vec::with_capacity(523775);
+    }
+
+    #[inline(never)]
+    fn procWithArray(vec : &Vec<i32>) {
+        for i in 0..vec.len() {
+            assert_eq!(i as i32, vec[i]);
+        }
+    }
+
+    #[inline(never)]
+    fn fillArray(vec : &mut Vec<i32>) {
+        for i in 0..vec.capacity() {
+            vec.push(i as i32);
+        }
+    }
+
+    fn test_xmm(size : usize) -> (u128, u128) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size * 4, 16);
+            let mut vec = createArray();
+            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            for (i, val) in a.iter_mut().enumerate() {
+                *val = (i * 4) as i32;
+            }
+            let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+
+            fillArray(&mut vec);
+
+            let now = Instant::now();
+            xmmntcpy(b.as_mut_ptr() as *mut c_void, a.as_mut_ptr() as *const c_void, size * 4);
+            let time = now.elapsed().as_micros();
+            
+            let now = Instant::now();
+            procWithArray(&vec);
+            let arr_time = now.elapsed().as_micros();
+
+           // println!("Xmm elapsed: {time}, process: {arr_time}");
+
+            for i in 0..size {
+                assert_eq!(a[i], b[i]);
+            }
+
+            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(b.as_mut_ptr() as *mut u8, layout);
+
+            (time, arr_time)
+        }
+    }
+
+    fn test_avx(size : usize) -> (u128, u128) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size * 4, 32);
+            let mut vec = createArray();
+            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            for (i, val) in a.iter_mut().enumerate() {
+                *val = (i * 4) as i32;
+            }
+            let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+
+            fillArray(&mut vec);
+
+            let now = Instant::now();
+            ntcpy(b.as_mut_ptr() as *mut c_void, a.as_ptr() as *const c_void, size * 4);
+            let time = now.elapsed().as_micros();
+
+            let now = Instant::now();
+            procWithArray(&vec);
+            let arr_time = now.elapsed().as_micros();
+
+//            println!("AVX elapsed: {time}, process: {arr_time}");
+
+            for i in 0..size {
+                assert_eq!(a[i], b[i]);
+            }
+
+            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(b.as_mut_ptr() as *mut u8, layout);
+
+            (time, arr_time)
+        }
+    }
+
+    fn test_default(size : usize) -> (u128, u128) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size * 4, 4);
+            let mut vec = createArray();
+            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            for (i, val) in a.iter_mut().enumerate() {
+                *val = (i * 4) as i32;
+            }
+            let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+
+            fillArray(&mut vec);
+
+            let now = Instant::now();
+            b.as_mut_ptr().copy_from(a.as_ptr(), size);
+            let time = now.elapsed().as_micros();
+
+            let now = Instant::now();
+            procWithArray(&vec);
+            let arr_time = now.elapsed().as_micros();
+
+           // println!("Default elapsed: {time}, process: {arr_time}");
+
+            for i in 0..size {
+                assert_eq!(a[i], b[i]);
+            }
+
+            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(b.as_mut_ptr() as *mut u8, layout);
+
+            (time, arr_time)
+        }
+    }
+
+    fn test_default_aligned(size : usize) -> (u128, u128) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size * 4, 32);
+            let mut vec = createArray();
+            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            for (i, val) in a.iter_mut().enumerate() {
+                *val = (i * 4) as i32;
+            }
+            let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+
+            fillArray(&mut vec);
+
+            let now = Instant::now();
+            b.as_mut_ptr().copy_from(a.as_ptr(), size);
+            let time = now.elapsed().as_micros();
+
+            let now = Instant::now();
+            procWithArray(&vec);
+            let arr_time = now.elapsed().as_micros();
+
+            //println!("Default aligned elapsed: {time}, process: {arr_time}");
+
+            for i in 0..size {
+                assert_eq!(a[i], b[i]);
+            }
+
+            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(b.as_mut_ptr() as *mut u8, layout);
+
+            (time, arr_time)
+        }
+    }
+
+    const LOOPS : u128 = 100;
+
+    #[test]
+    fn full_test() {
+        let mut time = (0u128, 0u128);
+        for size in [4096, 16384, 65536, 262144, 1048576, 4194304, 16777216] {
+            println!("Size: {size}");
+            time = (0u128, 0u128);
+            for _ in 0..LOOPS {
+                let val = test_avx(size);
+                time.0 += val.0;
+                time.1 += val.1;
+            }
+            println!("AVX elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
+
+            time = (0, 0);
+            for _ in 0..LOOPS {
+                let val = test_xmm(size);
+                time.0 += val.0;
+                time.1 += val.1;
+            }
+            println!("Xmm elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
+
+            time = (0, 0);
+            for _ in 0..LOOPS {
+                let val = test_default(size);
+                time.0 += val.0;
+                time.1 += val.1;
+            }
+            println!("Default elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
+
+            time = (0, 0);
+            for _ in 0..LOOPS {
+                let val = test_default_aligned(size);
+                time.0 += val.0;
+                time.1 += val.1;
+            }
+            println!("Default aligned elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
+        }
+    }
+}

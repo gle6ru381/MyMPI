@@ -7,6 +7,9 @@ edition = "2021"
 name = "my_mpi"
 path = "src/main.rs"
 
+[profile.dev]
+opt-level=3
+
 [lib]
 name = "mpi"
 path = "src/mpi/lib.rs"
