@@ -1,4 +1,4 @@
-use crate::{types::*, MPI_CHECK, MPI_CHECK_COMM};
+use crate::{types::*, private::*, MPI_CHECK, MPI_CHECK_COMM};
 use crate::context::Context;
 use crate::errhandle::*;
 use crate::comm::*;

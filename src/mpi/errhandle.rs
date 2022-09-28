@@ -1,14 +1,19 @@
 use std::ffi::CStr;
 
 use crate::context::Context;
-use crate::{types::*, cstr, p_mpi_abort, CommGroup};
+use crate::{types::*, private::*, cstr, p_mpi_abort, CommGroup};
 use zstr::zstr;
 
 #[macro_export]
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK {
     ($exp:expr, $comm:expr, $code:expr) => {
-        if $exp {MPI_SUCCESS} else {p_mpi_call_errhandler($comm, $code)}
+        if $exp {
+            MPI_SUCCESS
+        } else {
+            debug!("Chech failed");
+            p_mpi_call_errhandler($comm, $code)
+        }
     };
 }
 
@@ -131,7 +136,7 @@ type ErrHandler = fn(&MPI_Comm, &mut i32);
 const ERRH_MAX : i32 = 2;
 
 pub (crate) fn p_mpi_errors_are_fatal(pcomm : &MPI_Comm, pcode : &mut i32) {
-    println!("MPI fatal error for {}", Context::rank());
+    println!("MPI fatal error for {}, code: {pcode}", Context::rank());
     p_mpi_abort(*pcomm, *pcode);
 }
 

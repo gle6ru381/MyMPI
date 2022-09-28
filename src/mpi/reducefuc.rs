@@ -1,4 +1,4 @@
-use std::{slice::{from_raw_parts, from_raw_parts_mut}, ops::AddAssign};
+use std::{slice::{from_raw_parts, from_raw_parts_mut}, ops::AddAssign, fmt::Display};
 
 use crate::private::*;
 
@@ -26,12 +26,13 @@ fn min_proc<T>(src : *const T, dst : *mut T, len : usize) where T : PartialOrd +
     }
 }
 
-fn max_proc<T>(src : *const T, dst : *mut T, len : usize) where T : PartialOrd + Copy
+fn max_proc<T>(src : *const T, dst : *mut T, len : usize) where T : PartialOrd + Copy + Display
 {
     unsafe {
         let d = from_raw_parts_mut(dst, len);
         let s = from_raw_parts(src, len);
         for i in 0..len {
+            debug!("&&&&&&&&&&&&&&&&&&Compare {} with {}", s[i], d[i]);
             if s[i] > d[i] {
                 d[i] = s[i];
             }
