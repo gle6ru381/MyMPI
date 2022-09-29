@@ -17,6 +17,13 @@ crate-type = ["rlib", "cdylib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "mem_benchmark"
+harness = false
+
 [dependencies]
 libc = "0.2"
 zstr = "0.1.1"

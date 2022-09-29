@@ -24,7 +24,7 @@ fn main() {
     let b = unsafe {from_raw_parts_mut(alloc::alloc(layout) as *mut i32, size)};
 
     let now = Instant::now();
-    mpi::memory::ntcpy(b.as_mut_ptr() as *mut i32 as *mut c_void, a.as_ptr() as *const c_void, 4 * size);
+    mpi::memory::ymmntcpy(b.as_mut_ptr() as *mut i32 as *mut c_void, a.as_ptr() as *const c_void, 4 * size);
     let val = now.elapsed().as_micros();
     println!("Elapsed time: {val}");
 

@@ -29,10 +29,10 @@ mod tests {
 
     use libc::c_void;
 
-    use crate::{memory::{ntcpy, xmmntcpy}, p_mpi_rank_unmap};
+    use crate::{memory::{ymmntcpy, xmmntcpy, ymmntcpy_prefetch, ymmntcpy_short, ymmntcpy_short_prefetch}, p_mpi_rank_unmap};
 
     fn createArray() -> Vec<i32> {
-        return Vec::with_capacity(523775);
+        return Vec::with_capacity(983040);
     }
 
     #[inline(never)]
@@ -95,7 +95,7 @@ mod tests {
             fillArray(&mut vec);
 
             let now = Instant::now();
-            ntcpy(b.as_mut_ptr() as *mut c_void, a.as_ptr() as *const c_void, size * 4);
+            ymmntcpy(b.as_mut_ptr() as *mut c_void, a.as_ptr() as *const c_void, size * 4);
             let time = now.elapsed().as_micros();
 
             let now = Instant::now();
@@ -181,12 +181,111 @@ mod tests {
         }
     }
 
+    fn test_avx_prefetch(size : usize) -> (u128, u128) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size * 4, 32);
+            let mut vec = createArray();
+            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            for (i, val) in a.iter_mut().enumerate() {
+                *val = (i * 4) as i32;
+            }
+            let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+
+            fillArray(&mut vec);
+
+            let now = Instant::now();
+            ymmntcpy_prefetch(b.as_mut_ptr() as *mut c_void, a.as_ptr() as *const c_void, size * 4);
+            let time = now.elapsed().as_micros();
+
+            let now = Instant::now();
+            procWithArray(&vec);
+            let arr_time = now.elapsed().as_micros();
+
+//            println!("AVX elapsed: {time}, process: {arr_time}");
+
+            for i in 0..size {
+                assert_eq!(a[i], b[i]);
+            }
+
+            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(b.as_mut_ptr() as *mut u8, layout);
+
+            (time, arr_time)
+        }
+    }
+
+    fn test_avx_short(size : usize) -> (u128, u128) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size * 4, 32);
+            let mut vec = createArray();
+            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            for (i, val) in a.iter_mut().enumerate() {
+                *val = (i * 4) as i32;
+            }
+            let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+
+            fillArray(&mut vec);
+
+            let now = Instant::now();
+            ymmntcpy_short(b.as_mut_ptr() as *mut c_void, a.as_ptr() as *const c_void, size * 4);
+            let time = now.elapsed().as_micros();
+
+            let now = Instant::now();
+            procWithArray(&vec);
+            let arr_time = now.elapsed().as_micros();
+
+//            println!("AVX elapsed: {time}, process: {arr_time}");
+
+            for i in 0..size {
+                assert_eq!(a[i], b[i]);
+            }
+
+            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(b.as_mut_ptr() as *mut u8, layout);
+
+            (time, arr_time)
+        }
+    }
+
+    fn test_avx_short_prefetch(size : usize) -> (u128, u128) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(size * 4, 32);
+            let mut vec = createArray();
+            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            for (i, val) in a.iter_mut().enumerate() {
+                *val = (i * 4) as i32;
+            }
+            let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+
+            fillArray(&mut vec);
+
+            let now = Instant::now();
+            ymmntcpy_short_prefetch(b.as_mut_ptr() as *mut c_void, a.as_ptr() as *const c_void, size * 4);
+            let time = now.elapsed().as_micros();
+
+            let now = Instant::now();
+            procWithArray(&vec);
+            let arr_time = now.elapsed().as_micros();
+
+//            println!("AVX elapsed: {time}, process: {arr_time}");
+
+            for i in 0..size {
+                assert_eq!(a[i], b[i]);
+            }
+
+            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(b.as_mut_ptr() as *mut u8, layout);
+
+            (time, arr_time)
+        }
+    }
+
     const LOOPS : u128 = 100;
 
     #[test]
     fn full_test() {
         let mut time = (0u128, 0u128);
-        for size in [4096, 16384, 65536, 262144, 1048576, 4194304, 16777216] {
+        for size in [4096, 16384, 65536, 262144, 1048576, 1310720, 4194304, 8388608, 9699328] {
             println!("Size: {size}");
             time = (0u128, 0u128);
             for _ in 0..LOOPS {
@@ -219,6 +318,30 @@ mod tests {
                 time.1 += val.1;
             }
             println!("Default aligned elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
+
+            time = (0, 0);
+            for _ in 0..LOOPS {
+                let val = test_avx_prefetch(size);
+                time.0 += val.0;
+                time.1 += val.1;
+            }
+            println!("AVX prefetch elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
+
+            time = (0, 0);
+            for _ in 0..LOOPS {
+                let val = test_avx_short(size);
+                time.0 += val.0;
+                time.1 += val.1;
+            }
+            println!("AVX short elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
+
+            time = (0, 0);
+            for _ in 0..LOOPS {
+                let val = test_avx_short_prefetch(size);
+                time.0 += val.0;
+                time.1 += val.1;
+            }
+            println!("AVX short prefetch elapsed time: {}, after process time: {}", time.0 / LOOPS, time.1 / LOOPS);
         }
     }
 }

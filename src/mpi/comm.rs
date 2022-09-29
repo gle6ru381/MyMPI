@@ -442,7 +442,7 @@ pub extern "C" fn MPI_Comm_get_errhandler(comm : MPI_Comm, perrh : *mut MPI_Errh
 pub extern "C" fn MPI_Comm_set_errhandler(comm : MPI_Comm, errh : MPI_Errhandler) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
-    MPI_CHECK_ERRH!(comm, errh);
+  //  MPI_CHECK_ERRH!(comm, errh);
 
     CommGroup::set_err_handler(comm, errh);
 
