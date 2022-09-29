@@ -163,9 +163,10 @@ mod tests {
         }
     }
 
+    #[inline(never)]
     fn test_default_aligned(size: usize) -> (u128, u128) {
         unsafe {
-            let layout = Layout::from_size_align_unchecked(size * 4, 32);
+            let layout = Layout::from_size_align_unchecked(size * 4, 64);
             let mut vec = createArray();
             let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
             for (i, val) in a.iter_mut().enumerate() {
@@ -173,12 +174,14 @@ mod tests {
             }
             let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
 
-            fillArray(&mut vec);
+            //fillArray(&mut vec);
 
-            let now = Instant::now();
-            b.as_mut_ptr().copy_from(a.as_ptr(), size);
-            let time = now.elapsed().as_micros();
-
+            //let now = Instant::now();
+            let tb = b.as_mut_ptr();
+            let ta = a.as_mut_ptr();
+            tb.copy_from(ta, size);
+            //let time = now.elapsed().as_micros();
+            let time = 0;
             let now = Instant::now();
             procWithArray(&vec);
             let arr_time = now.elapsed().as_micros();
@@ -315,44 +318,44 @@ mod tests {
         for size in [
             4096, 16384, 65536, 262144, 1048576, 1310720, 4194304, 8388608, 9699328,
         ] {
-            println!("Size: {size}");
-            time = (0u128, 0u128);
-            for _ in 0..LOOPS {
-                let val = test_avx(size);
-                time.0 += val.0;
-                time.1 += val.1;
-            }
-            println!(
-                "AVX elapsed time: {}, after process time: {}",
-                time.0 / LOOPS,
-                time.1 / LOOPS
-            );
+            // println!("Size: {size}");
+            // time = (0u128, 0u128);
+            // for _ in 0..LOOPS {
+            //     let val = test_avx(size);
+            //     time.0 += val.0;
+            //     time.1 += val.1;
+            // }
+            // println!(
+            //     "AVX elapsed time: {}, after process time: {}",
+            //     time.0 / LOOPS,
+            //     time.1 / LOOPS
+            // );
 
-            time = (0, 0);
-            for _ in 0..LOOPS {
-                let val = test_xmm(size);
-                time.0 += val.0;
-                time.1 += val.1;
-            }
-            println!(
-                "Xmm elapsed time: {}, after process time: {}",
-                time.0 / LOOPS,
-                time.1 / LOOPS
-            );
+            // time = (0, 0);
+            // for _ in 0..LOOPS {
+            //     let val = test_xmm(size);
+            //     time.0 += val.0;
+            //     time.1 += val.1;
+            // }
+            // println!(
+            //     "Xmm elapsed time: {}, after process time: {}",
+            //     time.0 / LOOPS,
+            //     time.1 / LOOPS
+            // );
 
-            time = (0, 0);
-            for _ in 0..LOOPS {
-                let val = test_default(size);
-                time.0 += val.0;
-                time.1 += val.1;
-            }
-            println!(
-                "Default elapsed time: {}, after process time: {}",
-                time.0 / LOOPS,
-                time.1 / LOOPS
-            );
+            // time = (0, 0);
+            // for _ in 0..LOOPS {
+            //     let val = test_default(size);
+            //     time.0 += val.0;
+            //     time.1 += val.1;
+            // }
+            // println!(
+            //     "Default elapsed time: {}, after process time: {}",
+            //     time.0 / LOOPS,
+            //     time.1 / LOOPS
+            // );
 
-            time = (0, 0);
+            // time = (0, 0);
             for _ in 0..LOOPS {
                 let val = test_default_aligned(size);
                 time.0 += val.0;

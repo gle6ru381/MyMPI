@@ -108,6 +108,9 @@ pub fn ymmntcpy_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size
         while size >= 256 {
             asm!(
                 "prefetchnta [{src} + 256]",
+                "prefetchnta [{src} + 320]",
+                "prefetchnta [{src} + 384]",
+                "prefetchnta [{src} + 448]",
                 "vmovntdqa {temp0}, [{src} + 0]",
                 "vmovntdqa {temp1}, [{src} + 32]",
                 "vmovntdqa {temp2}, [{src} + 64]",
@@ -392,3 +395,113 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
         }
     }
 }
+
+// #[feature(avx512f)]
+// pub fn avx512ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size : usize) {
+//     unsafe {
+//         while size >= 128 {
+//             asm!(
+//                 "prefetchnta [{src} + 128]",
+//                 "prefetchnta [{src} + 192]",
+//                 "vmovntdqa {temp0}, [{src} + 0]",
+//                 "vmovntdqa {temp0}, [{src} + 64]",
+//                 "vmovntdq [{dest} + 0], {temp0}",
+//                 "vmovntdq [{dest} + 64], {temp1}",
+//                 dest = inout(reg) dest,
+//                 src = inout(reg) src,
+//                 temp0 = out(zmm_reg) _,
+//                 temp1 = out(zmm_reg) _,
+//             );
+//             dest = dest.add(128);
+//             src = src.add(128);
+//             size -= 128;
+//         }
+//         if size >= 64 {
+//             asm!(
+//                 "vmovntdqa {temp0}, [{src} + 0]",
+//                 "vmovntdq [{dest} + 0], {temp0}",
+//                 dest = inout(reg) dest,
+//                 src = inout(reg) src,
+//                 temp0 = out(zmm_reg) _,
+//             );
+//             dest = dest.add(64);
+//             src = src.add(64);
+//             size -= 64;
+//         }
+//         if size >= 32 {
+//             asm!(
+//                 "vmovntdqa {temp0}, [{src} + 0]",
+//                 "vmovntdq [{dest} + 0], {temp0}",
+//                 dest = inout(reg) dest,
+//                 src = inout(reg) src,
+//                 temp0 = out(ymm_reg) _,
+//             );
+//             dest = dest.add(32);
+//             src = src.add(32);
+//             size -= 32;
+//         }
+//         if size >= 16 {
+//             asm!(
+//                 "vmovntdqa {temp0}, [{src} + 0]",
+//                 "vmovntdq [{dest} + 0], {temp0}",
+//                 dest = inout(reg) dest,
+//                 src = inout(reg) src,
+//                 temp0 = out(xmm_reg) _,
+//             );
+//             dest = dest.add(16);
+//             src = src.add(16);
+//             size -= 32;
+//         }
+//         while size != 0 {
+//             *(dest as *mut u8) = *(src as *const u8);
+//             size -= 1;
+//         }
+//     }
+// }
+
+// #[feature(avx512f)]
+// pub fn avx512ntcpy_short(mut dest: *mut c_void, mut src: *mut c_void, size : usize) {
+//     unsafe {
+//         while size >= 64 {
+//             asm!(
+//                 "prefetchnta [{src} + 64]",
+//                 "vmovntdqa {temp0}, [{src} + 0]",
+//                 "vmovntdq [{dest} + 0], {temp0}",
+//                 dest = inout(reg) dest,
+//                 src = inout(reg) src,
+//                 temp0 = out(zmm_reg) _,
+//             );
+//             dest = dest.add(64);
+//             src = src.add(64);
+//             size -= 64;
+//         }
+//         if size >= 32 {
+//             asm!(
+//                 "vmovntdqa {temp0}, [{src} + 0]",
+//                 "vmovntdq [{dest} + 0], {temp0}",
+//                 dest = inout(reg) dest,
+//                 src = inout(reg) src,
+//                 temp0 = out(ymm_reg) _,
+//             );
+//             dest = dest.add(32);
+//             src = src.add(32);
+//             size -= 32;
+//         }
+//         if size >= 16 {
+//             asm!(
+//                 "vmovntdqa {temp0}, [{src} + 0]",
+//                 "vmovntdq [{dest} + 0], {temp0}",
+//                 dest = inout(reg) dest,
+//                 src = inout(reg) src,
+//                 temp0 = out(xmm_reg) _,
+//             );
+//             dest = dest.add(16);
+//             src = src.add(16);
+//             size -= 32;
+//         }
+//         while size != 0 {
+//             *(dest as *mut u8) = *(src as *const u8);
+//             size -= 1;
+//         }
+//     }
+// }
