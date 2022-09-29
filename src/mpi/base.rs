@@ -1,21 +1,25 @@
-use crate::{types::*, private::*, MPI_CHECK, MPI_CHECK_COMM};
+use crate::comm::*;
 use crate::context::Context;
 use crate::errhandle::*;
-use crate::comm::*;
+use crate::{private::*, types::*, MPI_CHECK, MPI_CHECK_COMM};
 
-pub (crate) fn p_mpi_abort(comm : MPI_Comm, code : i32) {
+pub(crate) fn p_mpi_abort(comm: MPI_Comm, code: i32) {
     Context::deinit();
 
     std::process::exit(-1);
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Init(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32
-{
+pub extern "C" fn MPI_Init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
     println!("Enter mpi init");
     if Context::is_init() || pargc.is_null() || pargv.is_null() {
-            println!("MPI init fail {}, {}, {}", Context::is_init(), pargc.is_null(), pargv.is_null());
-            return !MPI_SUCCESS;
+        println!(
+            "MPI init fail {}, {}, {}",
+            Context::is_init(),
+            pargc.is_null(),
+            pargv.is_null()
+        );
+        return !MPI_SUCCESS;
     }
 
     MPI_CHECK!(!Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
@@ -28,8 +32,7 @@ pub extern "C" fn MPI_Init(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Finalize() -> i32
-{
+pub extern "C" fn MPI_Finalize() -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
 
     let mut code = p_mpi_comm_finit();
@@ -53,8 +56,7 @@ pub extern "C" fn MPI_Finalize() -> i32
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Abort(comm : MPI_Comm, code : i32) -> i32
-{
+pub extern "C" fn MPI_Abort(comm: MPI_Comm, code: i32) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
 
@@ -64,8 +66,7 @@ pub extern "C" fn MPI_Abort(comm : MPI_Comm, code : i32) -> i32
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Wtime() -> f64
-{
+pub extern "C" fn MPI_Wtime() -> f64 {
     let mut tv = std::mem::MaybeUninit::<libc::timeval>::uninit();
     unsafe {
         libc::gettimeofday(tv.as_mut_ptr(), std::ptr::null_mut());

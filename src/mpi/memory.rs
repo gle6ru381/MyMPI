@@ -1,7 +1,7 @@
 use std::arch::asm;
 use std::ffi::c_void;
 
-pub fn ymmntcpy(mut dest : *mut c_void, mut src : *const c_void, mut size : usize) {
+pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 256 {
             asm!(
@@ -69,7 +69,7 @@ pub fn ymmntcpy(mut dest : *mut c_void, mut src : *const c_void, mut size : usiz
                 temp1 = out(ymm_reg) _,
             );
             dest = dest.add(64);
-            src  = src.add(64);
+            src = src.add(64);
             size -= 64;
         }
         if size >= 32 {
@@ -103,7 +103,7 @@ pub fn ymmntcpy(mut dest : *mut c_void, mut src : *const c_void, mut size : usiz
     }
 }
 
-pub fn ymmntcpy_prefetch(mut dest : *mut c_void, mut src : *const c_void, mut size : usize) {
+pub fn ymmntcpy_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 256 {
             asm!(
@@ -172,7 +172,7 @@ pub fn ymmntcpy_prefetch(mut dest : *mut c_void, mut src : *const c_void, mut si
                 temp1 = out(ymm_reg) _,
             );
             dest = dest.add(64);
-            src  = src.add(64);
+            src = src.add(64);
             size -= 64;
         }
         if size >= 32 {
@@ -206,7 +206,7 @@ pub fn ymmntcpy_prefetch(mut dest : *mut c_void, mut src : *const c_void, mut si
     }
 }
 
-pub fn ymmntcpy_short(mut dest : *mut c_void, mut src : *const c_void, mut size : usize) {
+pub fn ymmntcpy_short(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 64 {
             asm!(
@@ -254,7 +254,7 @@ pub fn ymmntcpy_short(mut dest : *mut c_void, mut src : *const c_void, mut size 
     }
 }
 
-pub fn ymmntcpy_short_prefetch(mut dest : *mut c_void, mut src : *const c_void, mut size : usize) {
+pub fn ymmntcpy_short_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 64 {
             asm!(
@@ -303,7 +303,7 @@ pub fn ymmntcpy_short_prefetch(mut dest : *mut c_void, mut src : *const c_void, 
     }
 }
 
-pub fn xmmntcpy(mut dest : *mut c_void, mut src : *const c_void, mut n : usize) {
+pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
     unsafe {
         while n >= 128 {
             asm!(

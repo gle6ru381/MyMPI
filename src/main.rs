@@ -1,8 +1,8 @@
+use std::alloc;
 use std::alloc::Layout;
 use std::slice::from_raw_parts_mut;
 use std::time::Instant;
-use std::{ffi::CStr, mem::MaybeUninit, time::Duration, str::Bytes};
-use std::alloc;
+use std::{ffi::CStr, mem::MaybeUninit, str::Bytes, time::Duration};
 
 use mpi::*;
 use zstr::zstr;
@@ -10,21 +10,30 @@ use zstr::zstr;
 fn main() {
     let mut tmp = 3;
     let argc = &mut tmp;
-    let mut argv = (&mut[zstr!("my_mpi").as_ptr(), zstr!("-n").as_ptr(), zstr!("2").as_ptr()]).as_mut_ptr() as *mut*mut i8;
+    let mut argv = (&mut [
+        zstr!("my_mpi").as_ptr(),
+        zstr!("-n").as_ptr(),
+        zstr!("2").as_ptr(),
+    ])
+        .as_mut_ptr() as *mut *mut i8;
 
     std::env::set_var("MPI_SIZE", "4");
 
     let size = 1024 * 1024 * 100;
 
     let layout = Layout::from_size_align(size * 4, 32).unwrap();
-    let a = unsafe {from_raw_parts_mut(alloc::alloc(layout) as *mut i32, size)};
+    let a = unsafe { from_raw_parts_mut(alloc::alloc(layout) as *mut i32, size) };
     for (i, val) in a.iter_mut().enumerate() {
         *val = (i * 2) as i32;
     }
-    let b = unsafe {from_raw_parts_mut(alloc::alloc(layout) as *mut i32, size)};
+    let b = unsafe { from_raw_parts_mut(alloc::alloc(layout) as *mut i32, size) };
 
     let now = Instant::now();
-    mpi::memory::ymmntcpy(b.as_mut_ptr() as *mut i32 as *mut c_void, a.as_ptr() as *const c_void, 4 * size);
+    mpi::memory::ymmntcpy(
+        b.as_mut_ptr() as *mut i32 as *mut c_void,
+        a.as_ptr() as *const c_void,
+        4 * size,
+    );
     let val = now.elapsed().as_micros();
     println!("Elapsed time: {val}");
 
@@ -41,7 +50,7 @@ fn main() {
 
     let now = Instant::now();
     unsafe {
-        b.as_mut_ptr().copy_from(a.as_ptr(),  (size) as usize);
+        b.as_mut_ptr().copy_from(a.as_ptr(), (size) as usize);
     }
     let val = now.elapsed().as_micros();
     println!("Default elapsed: {val}");

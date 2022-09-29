@@ -3,23 +3,31 @@ use std::cmp::Ordering;
 use std::mem::size_of;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
-use crate::{types::*, private::*, MPI_CHECK, MPI_CHECK_COMM, MPI_CHECK_ERRH, MPI_Allreduce, uninit, MPI_Allgather};
 use crate::context::Context;
 use crate::errhandle::*;
+use crate::{
+    private::*, types::*, uninit, MPI_Allgather, MPI_Allreduce, MPI_CHECK, MPI_CHECK_COMM,
+    MPI_CHECK_ERRH,
+};
 
-const KEY_INC : i32 = 2;
+const KEY_INC: i32 = 2;
 
 #[derive(Clone)]
 struct Comm {
-    prank : Vec<i32>,
-    errh : MPI_Errhandler,
-    rank : i32,
-    key : i32,
+    prank: Vec<i32>,
+    errh: MPI_Errhandler,
+    rank: i32,
+    key: i32,
 }
 
 impl Comm {
     const fn new() -> Comm {
-        return Comm{prank: Vec::new(), errh: 0, rank: 0, key: 0};
+        return Comm {
+            prank: Vec::new(),
+            errh: 0,
+            rank: 0,
+            key: 0,
+        };
     }
 }
 
@@ -33,11 +41,11 @@ unsafe impl Sync for Comm {}
 
 #[derive(Clone, Copy)]
 struct CommSplit {
-    col : i32,
-    key : i32,
-    rank : i32,
-    grank : i32,
-    key_max : i32
+    col: i32,
+    key: i32,
+    rank: i32,
+    grank: i32,
+    key_max: i32,
 }
 
 impl CommSplit {
@@ -47,11 +55,14 @@ impl CommSplit {
 }
 
 pub struct CommGroup {
-    comms : Vec<Comm>,
-    key_max : i32
+    comms: Vec<Comm>,
+    key_max: i32,
 }
 
-static mut GROUP: CommGroup  = CommGroup{comms: Vec::new(), key_max: 0};
+static mut GROUP: CommGroup = CommGroup {
+    comms: Vec::new(),
+    key_max: 0,
+};
 
 impl CommGroup {
     fn create_self() -> i32 {
@@ -75,7 +86,7 @@ impl CommGroup {
 
         unsafe {
             let comm = &mut GROUP.comms[MPI_COMM_WORLD as usize];
-            
+
             comm.rank = Context::rank();
             comm.key = GROUP.key_max;
             comm.prank.reserve(Context::size() as usize);
@@ -90,7 +101,7 @@ impl CommGroup {
         MPI_SUCCESS
     }
 
-    fn init(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32 {
+    fn init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
         debug_assert!(!Context::is_init());
         debug_assert!(!pargc.is_null());
         debug_assert!(!pargv.is_null());
@@ -108,30 +119,37 @@ impl CommGroup {
 
     #[inline(always)]
     fn size() -> usize {
-        unsafe {GROUP.comms.len()}
+        unsafe { GROUP.comms.len() }
     }
 
     #[inline(always)]
-    pub fn err_handler(i : MPI_Comm) -> MPI_Errhandler {
+    pub fn err_handler(i: MPI_Comm) -> MPI_Errhandler {
         debug_assert!((i as usize) < Self::size() && i >= 0);
-        unsafe {GROUP.comms[i as usize].errh}
+        unsafe { GROUP.comms[i as usize].errh }
     }
 
     #[inline(always)]
-    pub fn set_err_handler(comm : MPI_Comm, errh : MPI_Errhandler) {
+    pub fn set_err_handler(comm: MPI_Comm, errh: MPI_Errhandler) {
         debug_assert!((comm as usize) < Self::size() && comm >= 0);
-        unsafe {GROUP.comms[comm as usize].errh = errh};
+        unsafe { GROUP.comms[comm as usize].errh = errh };
     }
 
-    pub fn comm_dup(comm : MPI_Comm, pcomm : *mut MPI_Comm) -> i32 {
+    pub fn comm_dup(comm: MPI_Comm, pcomm: *mut MPI_Comm) -> i32 {
         debug_assert!(Context::is_init());
         unsafe {
             debug_assert!(comm >= 0 && comm < GROUP.comms.len() as i32);
             debug_assert!(!pcomm.is_null());
 
-            let mut key_max : i32 = uninit!();
+            let mut key_max: i32 = uninit!();
 
-            CHECK_RET!(MPI_Allreduce(&GROUP.key_max as *const i32 as *const c_void, &mut key_max as *mut i32 as *mut c_void, 1, MPI_INT, MPI_MAX, comm));
+            CHECK_RET!(MPI_Allreduce(
+                &GROUP.key_max as *const i32 as *const c_void,
+                &mut key_max as *mut i32 as *mut c_void,
+                1,
+                MPI_INT,
+                MPI_MAX,
+                comm
+            ));
 
             GROUP.comms.push(GROUP.comms[comm as usize].clone());
             let item = GROUP.comms.last_mut().unwrap_unchecked();
@@ -143,7 +161,7 @@ impl CommGroup {
         MPI_SUCCESS
     }
 
-    fn split_cmp(lcomm : &CommSplit, rcomm : &CommSplit) -> Ordering {
+    fn split_cmp(lcomm: &CommSplit, rcomm: &CommSplit) -> Ordering {
         let keydiff = lcomm.key - rcomm.key;
 
         if keydiff < 0 {
@@ -161,7 +179,7 @@ impl CommGroup {
         Ordering::Equal
     }
 
-    pub fn comm_split(comm : MPI_Comm, col : i32, key : i32, pcomm : *mut MPI_Comm) -> i32 {
+    pub fn comm_split(comm: MPI_Comm, col: i32, key: i32, pcomm: *mut MPI_Comm) -> i32 {
         debug_assert!(Context::is_init());
         unsafe {
             debug_assert!(comm >= 0 && comm < GROUP.comms.len() as i32);
@@ -169,7 +187,10 @@ impl CommGroup {
             debug_assert!(!pcomm.is_null());
 
             let mut ent = CommSplit::new();
-            let layout = Layout::from_size_align_unchecked(GROUP.comms[comm as usize].prank.len() * size_of::<CommSplit>(), size_of::<CommSplit>());
+            let layout = Layout::from_size_align_unchecked(
+                GROUP.comms[comm as usize].prank.len() * size_of::<CommSplit>(),
+                size_of::<CommSplit>(),
+            );
             let pent = std::alloc::alloc(layout) as *mut CommSplit;
             if pent.is_null() {
                 return MPI_ERR_OTHER;
@@ -181,7 +202,15 @@ impl CommGroup {
             ent.grank = Context::rank();
             ent.key_max = GROUP.key_max;
 
-            let code = MPI_Allgather(&ent as *const CommSplit as *const c_void, 5, MPI_INT, pent as *mut c_void, 5, MPI_INT, comm);
+            let code = MPI_Allgather(
+                &ent as *const CommSplit as *const c_void,
+                5,
+                MPI_INT,
+                pent as *mut c_void,
+                5,
+                MPI_INT,
+                comm,
+            );
             if code != MPI_SUCCESS {
                 std::alloc::dealloc(pent as *mut u8, layout);
                 return code;
@@ -190,7 +219,7 @@ impl CommGroup {
             if col == MPI_UNDEFINED {
                 *pcomm = MPI_COMM_NULL;
                 std::alloc::dealloc(pent as *mut u8, layout);
-                return MPI_SUCCESS
+                return MPI_SUCCESS;
             }
 
             let mut ncol = 0;
@@ -210,7 +239,7 @@ impl CommGroup {
                 item.rank = 0;
                 item.key = GROUP.key_max;
                 item.errh = GROUP.comms[comm as usize].errh;
-                
+
                 *pcomm = (GROUP.comms.len() - 1) as i32;
                 GROUP.key_max += KEY_INC;
 
@@ -219,8 +248,11 @@ impl CommGroup {
                 return MPI_SUCCESS;
             }
 
-            let hlayout = Layout::from_size_align_unchecked(ncol * size_of::<*mut CommSplit>(), size_of::<*mut CommSplit>());
-            let hent = std::alloc::alloc(hlayout) as *mut*mut CommSplit;
+            let hlayout = Layout::from_size_align_unchecked(
+                ncol * size_of::<*mut CommSplit>(),
+                size_of::<*mut CommSplit>(),
+            );
+            let hent = std::alloc::alloc(hlayout) as *mut *mut CommSplit;
             if hent.is_null() {
                 std::alloc::dealloc(pent as *mut u8, layout);
                 return MPI_ERR_OTHER;
@@ -272,26 +304,32 @@ impl CommGroup {
     }
 }
 
-pub (crate) fn p_mpi_check_comm(comm : MPI_Comm) -> i32
-{
+pub(crate) fn p_mpi_check_comm(comm: MPI_Comm) -> i32 {
     unsafe {
-        MPI_CHECK!(comm >= 0 && comm < GROUP.comms.len() as i32, MPI_COMM_WORLD, MPI_ERR_COMM)
+        MPI_CHECK!(
+            comm >= 0 && comm < GROUP.comms.len() as i32,
+            MPI_COMM_WORLD,
+            MPI_ERR_COMM
+        )
     }
 }
 
-pub (crate) fn p_mpi_check_rank(rank : i32, comm : MPI_Comm) -> i32
-{
+pub(crate) fn p_mpi_check_rank(rank: i32, comm: MPI_Comm) -> i32 {
     let code = MPI_CHECK_COMM!(comm);
     if code != MPI_SUCCESS {
         return code;
     }
 
     unsafe {
-        MPI_CHECK!(rank >= 0 && rank < GROUP.comms[comm as usize].prank.len() as i32, comm, MPI_ERR_RANK)
+        MPI_CHECK!(
+            rank >= 0 && rank < GROUP.comms[comm as usize].prank.len() as i32,
+            comm,
+            MPI_ERR_RANK
+        )
     }
 }
 
-pub (crate) fn p_mpi_rank_map(comm : MPI_Comm, rank : i32) -> i32 {
+pub(crate) fn p_mpi_rank_map(comm: MPI_Comm, rank: i32) -> i32 {
     debug_assert!(Context::is_init());
     MPI_CHECK_COMM!(comm);
     unsafe {
@@ -301,7 +339,7 @@ pub (crate) fn p_mpi_rank_map(comm : MPI_Comm, rank : i32) -> i32 {
     }
 }
 
-pub (crate) fn p_mpi_rank_unmap(comm : MPI_Comm, rank : i32) -> i32 {
+pub(crate) fn p_mpi_rank_unmap(comm: MPI_Comm, rank: i32) -> i32 {
     debug_assert!(Context::is_init());
     MPI_CHECK_COMM!(comm);
     debug_assert!(rank >= 0 && rank < Context::size());
@@ -319,17 +357,15 @@ pub (crate) fn p_mpi_rank_unmap(comm : MPI_Comm, rank : i32) -> i32 {
     unreachable!()
 }
 
-pub (crate) fn p_mpi_tag_map(comm : MPI_Comm, tag : i32) -> i32 {
+pub(crate) fn p_mpi_tag_map(comm: MPI_Comm, tag: i32) -> i32 {
     debug_assert!(Context::is_init());
     MPI_CHECK_COMM!(comm);
     debug_assert!(tag >= 0 && tag <= 32767);
 
-    unsafe {
-        (GROUP.comms[comm as usize].key << 16) | (tag & 0x7FFF)
-    }
+    unsafe { (GROUP.comms[comm as usize].key << 16) | (tag & 0x7FFF) }
 }
 
-pub (crate) fn p_mpi_tag_unmap(comm : MPI_Comm, tag : i32) -> i32 {
+pub(crate) fn p_mpi_tag_unmap(comm: MPI_Comm, tag: i32) -> i32 {
     debug_assert!(Context::is_init());
     MPI_CHECK_COMM!(comm);
 
@@ -337,41 +373,34 @@ pub (crate) fn p_mpi_tag_unmap(comm : MPI_Comm, tag : i32) -> i32 {
 }
 
 #[inline(always)]
-pub (crate) fn p_mpi_comm_init(pargc : *mut i32, pargv : *mut*mut*mut i8) -> i32 {
+pub(crate) fn p_mpi_comm_init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
     CommGroup::init(pargc, pargv)
 }
 
-pub (crate) fn p_mpi_comm_finit() -> i32 {
+pub(crate) fn p_mpi_comm_finit() -> i32 {
     debug_assert!(Context::is_init());
 
     MPI_SUCCESS
 }
 
 #[inline]
-pub (crate) fn p_mpi_inc_key(comm : MPI_Comm)
-{
+pub(crate) fn p_mpi_inc_key(comm: MPI_Comm) {
     debug_assert!(Context::is_init());
     MPI_CHECK_COMM!(comm);
 
-    unsafe {
-        GROUP.comms[comm as usize].key += 1
-    }
+    unsafe { GROUP.comms[comm as usize].key += 1 }
 }
 
 #[inline]
-pub (crate) fn p_mpi_dec_key(comm : MPI_Comm)
-{
+pub(crate) fn p_mpi_dec_key(comm: MPI_Comm) {
     debug_assert!(Context::is_init());
     MPI_CHECK_COMM!(comm);
 
-    unsafe {
-        GROUP.comms[comm as usize].key -= 1
-    }
+    unsafe { GROUP.comms[comm as usize].key -= 1 }
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_size(comm : MPI_Comm, psize : *mut i32) -> i32
-{
+pub extern "C" fn MPI_Comm_size(comm: MPI_Comm, psize: *mut i32) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
     MPI_CHECK!(!psize.is_null(), comm, MPI_ERR_ARG);
@@ -384,8 +413,7 @@ pub extern "C" fn MPI_Comm_size(comm : MPI_Comm, psize : *mut i32) -> i32
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_rank(comm : MPI_Comm, prank : *mut i32) -> i32
-{
+pub extern "C" fn MPI_Comm_rank(comm: MPI_Comm, prank: *mut i32) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
     MPI_CHECK!(!prank.is_null(), comm, MPI_ERR_ARG);
@@ -398,8 +426,7 @@ pub extern "C" fn MPI_Comm_rank(comm : MPI_Comm, prank : *mut i32) -> i32
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_dup(comm : MPI_Comm, pcomm : *mut MPI_Comm) -> i32
-{
+pub extern "C" fn MPI_Comm_dup(comm: MPI_Comm, pcomm: *mut MPI_Comm) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
     MPI_CHECK!(!pcomm.is_null(), comm, MPI_ERR_ARG);
@@ -413,7 +440,7 @@ pub extern "C" fn MPI_Comm_dup(comm : MPI_Comm, pcomm : *mut MPI_Comm) -> i32
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_split(comm : MPI_Comm, col : i32, key : i32, pcomm : *mut MPI_Comm) -> i32 {
+pub extern "C" fn MPI_Comm_split(comm: MPI_Comm, col: i32, key: i32, pcomm: *mut MPI_Comm) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
     MPI_CHECK!(col >= 0 || col == MPI_UNDEFINED, comm, MPI_ERR_ARG);
@@ -428,7 +455,7 @@ pub extern "C" fn MPI_Comm_split(comm : MPI_Comm, col : i32, key : i32, pcomm : 
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_get_errhandler(comm : MPI_Comm, perrh : *mut MPI_Errhandler) -> i32 {
+pub extern "C" fn MPI_Comm_get_errhandler(comm: MPI_Comm, perrh: *mut MPI_Errhandler) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
     MPI_CHECK!(!perrh.is_null(), comm, MPI_ERR_ARG);
@@ -439,10 +466,10 @@ pub extern "C" fn MPI_Comm_get_errhandler(comm : MPI_Comm, perrh : *mut MPI_Errh
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_set_errhandler(comm : MPI_Comm, errh : MPI_Errhandler) -> i32 {
+pub extern "C" fn MPI_Comm_set_errhandler(comm: MPI_Comm, errh: MPI_Errhandler) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK_COMM!(comm);
-  //  MPI_CHECK_ERRH!(comm, errh);
+    //  MPI_CHECK_ERRH!(comm, errh);
 
     CommGroup::set_err_handler(comm, errh);
 
