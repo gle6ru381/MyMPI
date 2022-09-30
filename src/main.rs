@@ -19,7 +19,7 @@ fn main() {
 
     std::env::set_var("MPI_SIZE", "4");
 
-    let size = 1024 * 1024 * 100;
+    let size = 128;
 
     let layout = Layout::from_size_align(size * 4, 32).unwrap();
     let a = unsafe { from_raw_parts_mut(alloc::alloc(layout) as *mut i32, size) };
@@ -29,17 +29,17 @@ fn main() {
     let b = unsafe { from_raw_parts_mut(alloc::alloc(layout) as *mut i32, size) };
 
     let now = Instant::now();
-    mpi::memory::ymmntcpy(
+    mpi::memory::ymmntcpy_short_prefetch_aligned(
         b.as_mut_ptr() as *mut i32 as *mut c_void,
         a.as_ptr() as *const c_void,
-        4 * size,
+        size * 4,
     );
     let val = now.elapsed().as_micros();
     println!("Elapsed time: {val}");
 
     for i in 0..size {
         if a[i] != b[i] {
-            println!("Wrong copy!!");
+            println!("Wrong copy at {i}");
             break;
         }
     }
