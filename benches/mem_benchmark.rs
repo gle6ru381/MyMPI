@@ -109,6 +109,7 @@ fn deallocate_avx512(size: usize, a: *mut c_void, b: *mut c_void) {
 }
 
 fn cpy_benchmark(c: &mut Criterion) {
+    c.without_output();
     let buff_vec = vec![4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 4194304, 8388608, 16777216, 33554432, 67108864];
     let vec_buff = vec![4096, 16384, 131072, 262144, 524288, 786432, 1048576, 4194304, 6291456, 7876608];
     for &vec_size in vec_buff.iter() {
@@ -117,15 +118,14 @@ fn cpy_benchmark(c: &mut Criterion) {
         g.significance_level(0.0001);
         g.confidence_level(0.99999);
         g.warm_up_time(Duration::from_nanos(1));
-        let mut conf = PlotConfiguration::default();
-        conf.y_scale(criterion::AxisScale::Logarithmic);
-        conf.x_scale(criterion::AxisScale::Logarithmic);
-        conf.tics(buff_vec.clone());
-        conf.x_label(format!("Buffer size"));
-        conf.x_grid_major(true);
-        conf.y_grid_major(true);
         g.plot_config(
-           conf,
+            PlotConfiguration::default()
+            .y_scale(criterion::AxisScale::Logarithmic)
+            .x_scale(criterion::AxisScale::Logarithmic)
+            .tics(buff_vec.clone())
+            .x_label(format!("Buffer size"))
+            .x_grid_major(true)
+            .y_grid_major(true)
         );
         g.sample_size(10);
         g.sampling_mode(criterion::SamplingMode::Linear);
@@ -242,15 +242,14 @@ fn cpy_benchmark(c: &mut Criterion) {
         g.confidence_level(0.99999);
         g.warm_up_time(Duration::from_nanos(1));
         g.sampling_mode(criterion::SamplingMode::Linear);
-        let mut conf = PlotConfiguration::default();
-        conf.y_scale(criterion::AxisScale::Logarithmic);
-        conf.x_scale(criterion::AxisScale::Logarithmic);
-        conf.tics(buff_vec.clone());
-        conf.x_label(format!("Buffer size"));
-        conf.x_grid_major(true);
-        conf.y_grid_major(true);
         g.plot_config(
-           conf,
+            PlotConfiguration::default()
+            .y_scale(criterion::AxisScale::Logarithmic)
+            .x_scale(criterion::AxisScale::Logarithmic)
+            .tics(buff_vec.clone())
+            .x_label(format!("Buffer size"))
+            .x_grid_major(true)
+            .y_grid_major(true)
         );
         g.sample_size(100);
         for &vec_size in vec_buff.iter() {
