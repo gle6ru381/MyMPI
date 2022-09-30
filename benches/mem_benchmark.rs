@@ -109,20 +109,29 @@ fn deallocate_avx512(size: usize, a: *mut c_void, b: *mut c_void) {
 }
 
 fn cpy_benchmark(c: &mut Criterion) {
-    for vec_size in [4096, 16384, 131072, 262144, 524288, 786432, 1048576, 4194304, 6291456, 7876608] {
+    let buff_vec = vec![4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 4194304, 8388608, 16777216, 33554432, 67108864];
+    let vec_buff = vec![4096, 16384, 131072, 262144, 524288, 786432, 1048576, 4194304, 6291456, 7876608];
+    for &vec_size in vec_buff.iter() {
         let mut g = c.benchmark_group(format!("Copy_vec_size_{vec_size}"));
         g.noise_threshold(0.05);
         g.significance_level(0.0001);
         g.confidence_level(0.99999);
         g.warm_up_time(Duration::from_nanos(1));
+        let mut conf = PlotConfiguration::default();
+        conf.y_scale(criterion::AxisScale::Logarithmic);
+        conf.x_scale(criterion::AxisScale::Logarithmic);
+        conf.tics(buff_vec.clone());
+        conf.x_label(format!("Buffer size"));
+        conf.x_grid_major(true);
+        conf.y_grid_major(true);
         g.plot_config(
-           PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic),
+           conf,
         );
         g.sample_size(10);
         g.sampling_mode(criterion::SamplingMode::Linear);
         let mut vec = createArray(vec_size);
-        for size in [4096, 16384, 131072, 262144, 524288, 1048576, 4194304, 6291456, 7876608, 8388608, 12582912, 16777216, 33554432] {
-            let mut data = allocate_xmm(size);
+        for &size in buff_vec.iter() {
+            //let mut data = allocate_xmm(size);
 
             // g.throughput(criterion::Throughput::Bytes((vec_size + size) as u64));
             // g.bench_with_input(BenchmarkId::new("128bit", size), &size, |x, size| {
@@ -134,21 +143,21 @@ fn cpy_benchmark(c: &mut Criterion) {
             // });
             // dealoc_xmm(size, data.0, data.1);
 
-            data = allocate_default(size);
+            let mut data = allocate_default(size as usize);
             g.bench_with_input(BenchmarkId::new("Default", size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size) };
+                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
                     procWithArray(&mut vec);
                 })
             });
-            dealoc_default(size, data.0, data.1);
+            dealoc_default(size as usize, data.0, data.1);
 
-            data = allocate_ymm(size);
+            data = allocate_ymm(size as usize);
             g.bench_with_input(BenchmarkId::new("256bit", size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    ymmntcpy(data.1, data.0, *size);
+                    ymmntcpy(data.1, data.0, *size as usize);
                     procWithArray(&mut vec);
                 })
             });
@@ -156,7 +165,7 @@ fn cpy_benchmark(c: &mut Criterion) {
             g.bench_with_input(BenchmarkId::new("Default_align", size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size) };
+                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
                     procWithArray(&mut vec);
                 })
             });
@@ -196,7 +205,7 @@ fn cpy_benchmark(c: &mut Criterion) {
             g.bench_with_input(BenchmarkId::new("256bit_short_prefetch_aligned", size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    ymmntcpy_short_prefetch_aligned(data.1, data.0, *size);
+                    ymmntcpy_short_prefetch_aligned(data.1, data.0, *size as usize);
                     procWithArray(&mut vec);
                 })
             });
@@ -204,11 +213,11 @@ fn cpy_benchmark(c: &mut Criterion) {
             g.bench_with_input(BenchmarkId::new("256bit_prefetch_aligned", size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    ymmntcpy_prefetch_aligned(data.1, data.0, *size);
+                    ymmntcpy_prefetch_aligned(data.1, data.0, *size as usize);
                     procWithArray(&mut vec);
                 })
             });
-            dealoc_ymm(size, data.0, data.1);
+            dealoc_ymm(size as usize, data.0, data.1);
 
             // data = allocate_avx512(size);
             // g.bench_function(format!("Bench avx512, vector size: {vec_size}, block size: {size}"), |x| x.iter(|| {
@@ -226,19 +235,26 @@ fn cpy_benchmark(c: &mut Criterion) {
         g.finish();
     }
 
-    for size in [4096, 16384, 131072, 262144, 524288, 1048576, 4194304, 6291456, 7876608, 8388608, 12582912, 16777216, 33554432] {
+    for &size in buff_vec.iter() {
         let mut g = c.benchmark_group(format!("Copy_buf_size_{size}"));
         g.noise_threshold(0.05);
         g.significance_level(0.0001);
         g.confidence_level(0.99999);
         g.warm_up_time(Duration::from_nanos(1));
         g.sampling_mode(criterion::SamplingMode::Linear);
+        let mut conf = PlotConfiguration::default();
+        conf.y_scale(criterion::AxisScale::Logarithmic);
+        conf.x_scale(criterion::AxisScale::Logarithmic);
+        conf.tics(buff_vec.clone());
+        conf.x_label(format!("Buffer size"));
+        conf.x_grid_major(true);
+        conf.y_grid_major(true);
         g.plot_config(
-            PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic),
+           conf,
         );
-        g.sample_size(10);
-        for vec_size in [4096, 16384, 131072, 262144, 524288, 786432, 1048576, 4194304, 6291456, 7876608] {
-            let mut data = allocate_xmm(size);
+        g.sample_size(100);
+        for &vec_size in vec_buff.iter() {
+            //let mut data = allocate_xmm(size);
             let mut vec = createArray(vec_size);
 
             // g.throughput(criterion::Throughput::Bytes((vec_size + size) as u64));
@@ -251,31 +267,31 @@ fn cpy_benchmark(c: &mut Criterion) {
             // });
             // dealoc_xmm(size, data.0, data.1);
 
-            data = allocate_ymm(size);
+            let mut data = allocate_ymm(size as usize);
             g.bench_with_input(BenchmarkId::new("256bit", vec_size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    ymmntcpy(data.1, data.0, *size);
+                    ymmntcpy(data.1, data.0, *size as usize);
                     procWithArray(&mut vec);
                 })
             });
-            dealoc_ymm(size, data.0, data.1);
+            dealoc_ymm(size as usize, data.0, data.1);
 
-            data = allocate_default(size);
+            data = allocate_default(size as usize);
             g.bench_with_input(BenchmarkId::new("Default", vec_size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size) };
+                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
                     procWithArray(&mut vec);
                 })
             });
-            dealoc_default(size, data.0, data.1);
+            dealoc_default(size as usize, data.0, data.1);
 
-            data = allocate_ymm(size);
+            data = allocate_ymm(size as usize);
             g.bench_with_input(BenchmarkId::new("Default_align", vec_size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size) };
+                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
                     procWithArray(&mut vec);
                 })
             });
@@ -315,7 +331,7 @@ fn cpy_benchmark(c: &mut Criterion) {
             g.bench_with_input(BenchmarkId::new("256bit_short_prefetch_aligned", vec_size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    ymmntcpy_short_prefetch_aligned(data.1, data.0, *size);
+                    ymmntcpy_short_prefetch_aligned(data.1, data.0, *size as usize);
                     procWithArray(&mut vec);
                 })
             });
@@ -323,11 +339,11 @@ fn cpy_benchmark(c: &mut Criterion) {
             g.bench_with_input(BenchmarkId::new("256bit_prefetch_aligned", vec_size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
-                    ymmntcpy_prefetch_aligned(data.1, data.0, *size);
+                    ymmntcpy_prefetch_aligned(data.1, data.0, *size as usize);
                     procWithArray(&mut vec);
                 })
             });
-            dealoc_ymm(size, data.0, data.1);
+            dealoc_ymm(size as usize, data.0, data.1);
 
             // data = allocate_avx512(size);
             // g.bench_function(format!("Bench avx512, vector size: {vec_size}, block size: {size}"), |x| x.iter(|| {
