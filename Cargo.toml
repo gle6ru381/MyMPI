@@ -18,7 +18,7 @@ crate-type = ["rlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dev-dependencies]
-criterion = {version = "0.3", features = ["html_reports"]}
+criterion = {path = "deps/criterion", features = ["html_reports"]}
 
 [[bench]]
 name = "mem_benchmark"

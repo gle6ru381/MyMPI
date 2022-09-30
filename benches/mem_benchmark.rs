@@ -115,14 +115,14 @@ fn cpy_benchmark(c: &mut Criterion) {
         g.significance_level(0.0001);
         g.confidence_level(0.99999);
         g.warm_up_time(Duration::from_nanos(1));
-        g.sampling_mode(criterion::SamplingMode::Linear);
         g.plot_config(
-            PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic),
+           PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic),
         );
         g.sample_size(10);
-        for size in [4096, 16384, 131072, 262144, 524288, 1048576, 4194304, 6291456, 7876608, 8388608] {
+        g.sampling_mode(criterion::SamplingMode::Linear);
+        let mut vec = createArray(vec_size);
+        for size in [4096, 16384, 131072, 262144, 524288, 1048576, 4194304, 6291456, 7876608, 8388608, 12582912, 16777216, 33554432] {
             let mut data = allocate_xmm(size);
-            let mut vec = createArray(vec_size);
 
             // g.throughput(criterion::Throughput::Bytes((vec_size + size) as u64));
             // g.bench_with_input(BenchmarkId::new("128bit", size), &size, |x, size| {
@@ -133,16 +133,6 @@ fn cpy_benchmark(c: &mut Criterion) {
             //     })
             // });
             // dealoc_xmm(size, data.0, data.1);
-
-            data = allocate_ymm(size);
-            g.bench_with_input(BenchmarkId::new("256bit", size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    ymmntcpy(data.1, data.0, *size);
-                    procWithArray(&mut vec);
-                })
-            });
-            dealoc_ymm(size, data.0, data.1);
 
             data = allocate_default(size);
             g.bench_with_input(BenchmarkId::new("Default", size), &size, |x, size| {
@@ -155,6 +145,14 @@ fn cpy_benchmark(c: &mut Criterion) {
             dealoc_default(size, data.0, data.1);
 
             data = allocate_ymm(size);
+            g.bench_with_input(BenchmarkId::new("256bit", size), &size, |x, size| {
+                x.iter(|| {
+                    fillArray(&mut vec);
+                    ymmntcpy(data.1, data.0, *size);
+                    procWithArray(&mut vec);
+                })
+            });
+
             g.bench_with_input(BenchmarkId::new("Default_align", size), &size, |x, size| {
                 x.iter(|| {
                     fillArray(&mut vec);
@@ -228,7 +226,7 @@ fn cpy_benchmark(c: &mut Criterion) {
         g.finish();
     }
 
-    for size in [4096, 16384, 131072, 262144, 524288, 1048576, 4194304, 6291456, 7876608, 8388608] {
+    for size in [4096, 16384, 131072, 262144, 524288, 1048576, 4194304, 6291456, 7876608, 8388608, 12582912, 16777216, 33554432] {
         let mut g = c.benchmark_group(format!("Copy_buf_size_{size}"));
         g.noise_threshold(0.05);
         g.significance_level(0.0001);
@@ -238,7 +236,7 @@ fn cpy_benchmark(c: &mut Criterion) {
         g.plot_config(
             PlotConfiguration::default().summary_scale(criterion::AxisScale::Logarithmic),
         );
-        g.sample_size(5000);
+        g.sample_size(10);
         for vec_size in [4096, 16384, 131072, 262144, 524288, 786432, 1048576, 4194304, 6291456, 7876608] {
             let mut data = allocate_xmm(size);
             let mut vec = createArray(vec_size);

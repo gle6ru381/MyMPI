@@ -1,0 +1,3 @@
+[submodule "deps/criterion"]
+	path = deps/criterion
+	url = https://github.com/gle6ru381/criterion.rs
