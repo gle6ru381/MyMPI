@@ -1,14 +1,11 @@
 [package]
 name = "my_mpi"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
-[[bin]]
-name = "my_mpi"
-path = "src/main.rs"
-
 [profile.dev]
-opt-level=3
+opt-level = 0
+debug = true
 
 [lib]
 name = "mpi"

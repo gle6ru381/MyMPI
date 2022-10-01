@@ -7,58 +7,17 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'mpi'",
+            "name": "Cargo test",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=my_mpi"
-                ],
-                "filter": {
-                    "name": "mpi",
-                    "kind": "lib"
-                }
+                    "--profile=dev"
+                ]
             },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'my_mpi'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=my_mpi",
-                    "--package=my_mpi"
-                ],
-                "filter": {
-                    "name": "my_mpi",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'my_mpi'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=my_mpi",
-                    "--package=my_mpi"
-                ],
-                "filter": {
-                    "name": "my_mpi",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
+            "program": "${cargo:program}",
+            "args": []
         },
         {
             "type": "lldb",

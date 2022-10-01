@@ -1,10 +1,12 @@
-use crate::{HandlerContext};
-pub use crate::types::*;
-use crate::{
-    shm::ShmData
-};
-use std::{ffi::CStr};
 use crate::comm::CommGroup;
+pub use crate::private::*;
+use crate::shm::ShmData;
+pub use crate::types::*;
+use crate::{debug, HandlerContext};
+use std::ffi::CStr;
+
+// #[cfg(test)]
+// use zstr::zstr;
 
 pub struct Context {
     shm: ShmData,
@@ -35,36 +37,48 @@ impl Context {
     }
 
     pub fn comm() -> &'static mut CommGroup {
-        unsafe {&mut CONTEXT.comm_group}
+        unsafe { &mut CONTEXT.comm_group }
     }
 
     pub fn err_handler() -> &'static mut HandlerContext {
-        unsafe {&mut CONTEXT.err_handler}
+        unsafe { &mut CONTEXT.err_handler }
     }
 
     pub fn shm() -> &'static mut ShmData {
-        unsafe {&mut CONTEXT.shm}
+        unsafe { &mut CONTEXT.shm }
     }
 
     pub fn progress() -> i32 {
-        unsafe {CONTEXT.shm.progress()}
+        unsafe { CONTEXT.shm.progress() }
     }
 
     pub fn call_error(comm: MPI_Comm, code: i32) {
-        unsafe {CONTEXT.err_handler.call(comm, code);}
+        unsafe {
+            CONTEXT.err_handler.call(comm, code);
+        }
     }
 
     #[allow(dead_code)]
-    fn parseArgs(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
+    fn parse_args(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
         unsafe {
             let mut n: i32 = CONTEXT.mpi_size;
             let argc = *pargc;
             let mut argv = *pargv;
 
             while --argc != 0 {
+                println!("Arg step");
                 argv = argv.add(1);
-                let mut arg = CStr::from_ptr(*argv).to_str().unwrap();
+                println!("Arg: {:x}", *argv as usize);
+                let mut val = *argv;
+                while *val != '\0' as i8 {
+                    println!("Val: {}", *val as u8 as char);
+                    val = val.add(1);
+                }
+                let tmp = CStr::from_ptr(*argv);
+                println!("Tmp: {}", tmp.as_ptr() as usize);
+                let mut arg = tmp.to_str().unwrap();
                 if arg == "-n" || arg == "-np" {
+                    println!("Step in np");
                     if argc > 1 {
                         argv = argv.add(1);
                         arg = CStr::from_ptr(*argv).to_str().unwrap();
@@ -76,8 +90,10 @@ impl Context {
                             _ => {
                                 if n > 0 {
                                     *pargc -= 2;
-                                    while false {
+                                    while !argv.is_null() {
                                         argv = argv.add(1);
+                                        *pargc -= 1;
+                                        println!("Decrement argc: {}", *pargc);
                                         *((*pargv).add((*pargc - argc) as usize)) = *argv;
                                         *argv = std::ptr::null_mut();
                                     }
@@ -155,7 +171,15 @@ impl Context {
     pub fn deinit() -> i32 {
         unsafe {
             debug_assert!(CONTEXT.mpi_init);
+            debug!("Context deinit");
+            CONTEXT.shm.deinit();
             CONTEXT.mpi_init = false;
+            if CONTEXT.mpi_rank == 0 {
+                libc::signal(libc::SIGCHLD, libc::SIG_IGN);
+            } else {
+                std::process::exit(0);
+            }
+            debug!("Exit deinit");
         }
         MPI_SUCCESS
     }

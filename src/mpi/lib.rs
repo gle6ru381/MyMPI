@@ -20,6 +20,6 @@ pub use collectives::*;
 pub use comm::*;
 pub use errhandle::*;
 pub use metatypes::*;
+pub use private::uninit;
 pub use types::*;
 pub use xfer::*;
-pub use private::uninit;

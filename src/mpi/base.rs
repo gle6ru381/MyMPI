@@ -9,7 +9,7 @@ pub(crate) fn p_mpi_abort(_: MPI_Comm, _: i32) {
 
 #[no_mangle]
 pub extern "C" fn MPI_Init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
-    println!("Enter mpi init");
+    debug!("Enter mpi init");
 
     MPI_CHECK!(!Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     //MPI_CHECK!(!pargc.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
@@ -23,6 +23,7 @@ pub extern "C" fn MPI_Init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
 #[no_mangle]
 pub extern "C" fn MPI_Finalize() -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
+    debug!("MPI finalize");
 
     let code;
 
@@ -31,7 +32,7 @@ pub extern "C" fn MPI_Finalize() -> i32 {
         Context::call_error(MPI_COMM_WORLD, code);
     }
 
-    println!("{}/{}: -> finalize", Context::rank(), Context::size());
+    debug!("Finalize");
 
     MPI_SUCCESS
 }

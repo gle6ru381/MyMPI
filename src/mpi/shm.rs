@@ -136,6 +136,11 @@ impl ShmData {
 
     #[inline(always)]
     pub fn find_unexp(&mut self, rank: i32, tag: i32) -> MPI_Request {
+        debug!("Unexpect find with len: {}", self.unexp_queue.len());
+        if self.unexp_queue.len() != 0 {
+            let val = self.unexp_queue.iter().next().unwrap();
+            debug!("Find: {rank}:{tag}, Data: {}:{}", val.rank, val.tag);
+        }
         self.unexp_queue.find_by_tag(rank, tag)
     }
 
@@ -160,9 +165,27 @@ impl ShmData {
         MPI_SUCCESS
     }
 
+    pub fn deallocate(&mut self) -> i32 {
+        unsafe {
+            libc::munmap(
+                self.d as *mut c_void,
+                size_of::<MpiShm>() * (Context::size() * Context::size()) as usize,
+            );
+        }
+        MPI_SUCCESS
+    }
+
     pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8) -> i32 {
         debug_assert!(!Context::is_init());
         if self.allocate() != MPI_SUCCESS {
+            return MPI_ERR_INTERN;
+        }
+        MPI_SUCCESS
+    }
+
+    pub fn deinit(&mut self) -> i32 {
+        debug_assert!(Context::is_init());
+        if self.deallocate() != MPI_SUCCESS {
             return MPI_ERR_INTERN;
         }
         MPI_SUCCESS

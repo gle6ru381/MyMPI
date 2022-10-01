@@ -1,10 +1,8 @@
-use criterion::{
-    criterion_group, criterion_main, BenchmarkId, Criterion, PlotConfiguration,
-};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, PlotConfiguration};
 use mpi::memory::*;
 use std::alloc::*;
 use std::ffi::c_void;
-use std::slice::{from_raw_parts_mut};
+use std::slice::from_raw_parts_mut;
 use std::time::Duration;
 
 fn create_array(size: usize) -> Vec<i32> {

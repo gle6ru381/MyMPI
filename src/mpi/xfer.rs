@@ -21,6 +21,7 @@ impl P_MPI_Request {
         *pflag = 0;
         if !(*preq).is_null() {
             let req = unsafe { &mut **preq };
+            debug!("Test request: {}, {}", req.tag, req.rank);
             if req.flag != 0 {
                 debug!("Find request with tag: {}, rank: {}", req.tag, req.rank);
                 *pflag = 1;
@@ -42,6 +43,7 @@ impl P_MPI_Request {
         let mut flag = 0;
         while flag == 0 {
             let code = Self::test(preq, &mut flag, pstat);
+            debug!("Flag test: {}", flag);
             if code != MPI_SUCCESS {
                 return code;
             }
@@ -51,6 +53,7 @@ impl P_MPI_Request {
 
     pub fn wait_all(reqs: &mut [MPI_Request], pstat: &mut [MPI_Status]) -> i32 {
         debug_assert!(reqs.len() == pstat.len());
+        debug!("Wait all, size: {}", reqs.len());
 
         for i in pstat.iter_mut() {
             i.MPI_ERROR = MPI_ERR_PENDING;
@@ -65,7 +68,7 @@ impl P_MPI_Request {
                     let code = Self::test(req, &mut flag, stat);
                     if code != MPI_SUCCESS {
                         stat.MPI_ERROR = code;
-                        return MPI_ERR_IN_STATUS
+                        return MPI_ERR_IN_STATUS;
                     }
                     if flag != 0 {
                         stat.MPI_ERROR = MPI_SUCCESS;
@@ -141,7 +144,7 @@ impl Buffer {
             return Context::err_handler().call(self.comm, code);
         }
 
-        *req = Context::shm().find_unexp(self.rank, self.tag);
+        *req = Context::shm().find_unexp(src, tag);
         if !(*req).is_null() {
             let rreq = unsafe { &mut **req };
             debug!("Unexprect rank: {}, tag: {}", rreq.rank, rreq.tag);
@@ -158,6 +161,7 @@ impl Buffer {
             *rreq = self.to_request(1);
             return MPI_SUCCESS;
         } else {
+            debug!("Generate new request");
             let rreq = Context::shm().get_recv();
             if rreq.is_some() {
                 unsafe {
@@ -303,21 +307,28 @@ pub extern "C" fn MPI_Irecv(
 pub extern "C" fn MPI_Test(preq: *mut MPI_Request, pflag: *mut i32, pstat: *mut MPI_Status) -> i32 {
     MPI_CHECK!(!preq.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
     MPI_CHECK!(!pflag.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
-    P_MPI_Request::test(unsafe {&mut *preq}, unsafe {&mut *pflag}, pstat)
+    P_MPI_Request::test(unsafe { &mut *preq }, unsafe { &mut *pflag }, pstat)
 }
 
 #[no_mangle]
 pub extern "C" fn MPI_Wait(preq: *mut MPI_Request, pstat: *mut MPI_Status) -> i32 {
     MPI_CHECK!(!preq.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
-    P_MPI_Request::wait(unsafe {&mut *preq}, pstat)
+    P_MPI_Request::wait(unsafe { &mut *preq }, pstat)
 }
 
 #[no_mangle]
 pub extern "C" fn MPI_Waitall(cnt: i32, preq: *mut MPI_Request, pstat: *mut MPI_Status) -> i32 {
-    MPI_CHECK!(!preq.is_null() && !pstat.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
+    MPI_CHECK!(
+        !preq.is_null() && !pstat.is_null(),
+        MPI_COMM_WORLD,
+        MPI_ERR_ARG
+    );
     MPI_CHECK!(cnt >= 0, MPI_COMM_WORLD, MPI_ERR_COUNT);
     if cnt == 0 {
-        return MPI_SUCCESS
+        return MPI_SUCCESS;
     }
-    P_MPI_Request::wait_all(unsafe {std::slice::from_raw_parts_mut(preq, cnt as usize)}, unsafe {std::slice::from_raw_parts_mut(pstat, cnt as usize)})
+    P_MPI_Request::wait_all(
+        unsafe { std::slice::from_raw_parts_mut(preq, cnt as usize) },
+        unsafe { std::slice::from_raw_parts_mut(pstat, cnt as usize) },
+    )
 }

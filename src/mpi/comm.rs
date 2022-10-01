@@ -4,9 +4,7 @@ use std::mem::size_of;
 use std::slice::from_raw_parts_mut;
 
 use crate::context::Context;
-use crate::{
-    private::*, types::*, MPI_Allgather, MPI_Allreduce, MPI_CHECK, MPI_CHECK_COMM,
-};
+use crate::{private::*, types::*, MPI_Allgather, MPI_Allreduce, MPI_CHECK, MPI_CHECK_COMM};
 
 const KEY_INC: i32 = 2;
 
@@ -99,8 +97,8 @@ impl CommGroup {
 
     pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8) -> i32 {
         debug_assert!(!Context::is_init());
-       // debug_assert!(!pargc.is_null());
-       // debug_assert!(!pargv.is_null());
+        // debug_assert!(!pargc.is_null());
+        // debug_assert!(!pargv.is_null());
 
         self.comms.resize(2, Comm::new());
 

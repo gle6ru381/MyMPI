@@ -5,7 +5,7 @@ use crate::{cstr, p_mpi_abort, private::*, types::*};
 use zstr::zstr;
 
 type ErrHandler = fn(MPI_Comm, i32);
-const ERRH_MAX : usize = 2;
+const ERRH_MAX: usize = 2;
 
 pub struct HandlerContext {
     handlers: [ErrHandler; ERRH_MAX],
@@ -140,7 +140,9 @@ impl HandlerContext {
     ];
 
     pub const fn new() -> Self {
-        HandlerContext { handlers: [p_mpi_errors_are_fatal, p_mpi_errors_return] }
+        HandlerContext {
+            handlers: [p_mpi_errors_are_fatal, p_mpi_errors_return],
+        }
     }
 
     pub fn err_to_string(err: i32) -> *const i8 {
