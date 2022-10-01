@@ -1,4 +1,5 @@
 pub use std::ffi::c_void;
+use std::mem::MaybeUninit;
 
 pub type MPI_Datatype = i32;
 pub type MPI_Comm = i32;
@@ -12,6 +13,7 @@ macro_rules! cstr {
     };
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct MPI_Status {
     pub MPI_SOURCE: i32,
@@ -34,6 +36,10 @@ impl MPI_Status {
             MPI_ERROR: 0,
             cnt: 0,
         }
+    }
+
+    pub const fn uninit() -> Self {
+        unsafe { MaybeUninit::uninit().assume_init() }
     }
 }
 

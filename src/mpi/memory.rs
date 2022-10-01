@@ -104,6 +104,7 @@ pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) 
     }
 }
 
+#[allow(unused_assignments)]
 #[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_aligned(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
@@ -445,6 +446,7 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
     }
 }
 
+#[allow(unused_assignments)]
 #[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_prefetch_aligned(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
@@ -493,6 +495,7 @@ pub fn ymmntcpy_prefetch_aligned(mut dest: *mut c_void, mut src: *const c_void, 
     }
 }
 
+#[allow(unused_assignments)]
 #[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_short_prefetch_aligned(
     mut dest: *mut c_void,

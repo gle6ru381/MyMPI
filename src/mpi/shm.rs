@@ -2,7 +2,6 @@
 
 use crate::private::*;
 use std::{
-    borrow::Borrow,
     mem::size_of,
     ptr::{null_mut, read_volatile, write_volatile},
 };
@@ -19,6 +18,7 @@ macro_rules! field_size {
     }};
 }
 
+#[repr(C)]
 struct Cell {
     pub len: i32,         // 4
     pub tag: i32,         // 8
@@ -58,6 +58,7 @@ impl Cell {
     }
 }
 
+#[repr(C)]
 struct MpiShm {
     nsend: i8,
     nrecv: i8,
@@ -159,12 +160,10 @@ impl ShmData {
         MPI_SUCCESS
     }
 
-    pub fn init(&mut self, pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
-        unsafe {
-            debug_assert!(!Context::is_init());
-            if self.allocate() != MPI_SUCCESS {
-                return MPI_ERR_INTERN;
-            }
+    pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8) -> i32 {
+        debug_assert!(!Context::is_init());
+        if self.allocate() != MPI_SUCCESS {
+            return MPI_ERR_INTERN;
         }
         MPI_SUCCESS
     }

@@ -1,6 +1,6 @@
 use crate::reducefuc::*;
 use crate::{
-    private::*, types::*, uninit, MPI_Comm_call_errhandler, MPI_Comm_rank, MPI_Comm_size, MPI_Recv,
+    private::*, types::*, MPI_Comm_call_errhandler, MPI_Comm_rank, MPI_Comm_size, MPI_Recv,
     MPI_Send, MPI_Type_size, MPI_CHECK, MPI_CHECK_OP, MPI_CHECK_TYPE,
 };
 use std::{alloc::Layout, ffi::c_void};
@@ -63,8 +63,8 @@ fn p_mpi_type_copy2(
 
 #[no_mangle]
 pub extern "C" fn MPI_Barrier(comm: MPI_Comm) -> i32 {
-    let mut size: i32 = uninit!();
-    let mut rank: i32 = uninit!();
+    let mut size: i32 = uninit();
+    let mut rank: i32 = uninit();
 
     CHECK_RET!(MPI_Comm_size(comm, &mut size));
     CHECK_RET!(MPI_Comm_rank(comm, &mut rank));
@@ -73,10 +73,12 @@ pub extern "C" fn MPI_Barrier(comm: MPI_Comm) -> i32 {
         return MPI_SUCCESS;
     }
 
-    p_mpi_inc_key(comm);
+    let cg = Context::comm();
 
-    let mut buf: i8 = uninit!();
-    let mut stat: MPI_Status = uninit!();
+    cg.inc_key(comm);
+
+    let mut buf: i8 = uninit();
+    let mut stat: MPI_Status = uninit();
     let pbuf = &mut buf as *mut i8 as *mut c_void;
 
     if size == 2 {
@@ -127,7 +129,7 @@ pub extern "C" fn MPI_Barrier(comm: MPI_Comm) -> i32 {
         }
     }
 
-    p_mpi_dec_key(comm);
+    cg.dec_key(comm);
 
     MPI_SUCCESS
 }
@@ -150,10 +152,11 @@ pub extern "C" fn MPI_Bcast(
     }
 
     debug!("Begin Broadcast");
-    p_mpi_inc_key(comm);
+    let cg = Context::comm();
+    cg.inc_key(comm);
 
     let mut code: i32;
-    let mut stat: MPI_Status = uninit!();
+    let mut stat: MPI_Status = uninit();
 
     if Context::size() == 2 {
         if Context::rank() == root {
@@ -208,7 +211,7 @@ pub extern "C" fn MPI_Bcast(
 
     debug!("End broadcast");
 
-    p_mpi_dec_key(comm);
+    cg.dec_key(comm);
     code
 }
 
@@ -240,9 +243,10 @@ pub extern "C" fn MPI_Reduce(
         return MPI_SUCCESS;
     }
 
-    p_mpi_inc_key(comm);
+    let cg = Context::comm();
+    cg.inc_key(comm);
     let mut code: i32;
-    let mut stat: MPI_Status = uninit!();
+    let mut stat: MPI_Status = uninit();
 
     if Context::size() == 2 {
         if Context::rank() == root {
@@ -262,14 +266,14 @@ pub extern "C" fn MPI_Reduce(
             code = MPI_Send(sbuf, cnt, dtype, root, REDUCE_TAG, comm);
         }
     } else {
-        let mut ext = uninit!();
+        let mut ext = uninit();
         let diff = (Context::size() + Context::rank() - root) % Context::size();
 
         debug!("&&&Reduce begin");
 
         code = MPI_Type_size(dtype, &mut ext);
         if code != MPI_SUCCESS {
-            p_mpi_dec_key(comm);
+            cg.dec_key(comm);
             return code;
         }
 
@@ -277,7 +281,7 @@ pub extern "C" fn MPI_Reduce(
         if Context::rank() != root {
             rbuf = unsafe { std::alloc::alloc(layout) as *mut c_void };
             if rbuf.is_null() {
-                p_mpi_dec_key(comm);
+                cg.dec_key(comm);
                 MPI_Comm_call_errhandler(comm, MPI_ERR_INTERN);
                 return MPI_ERR_INTERN;
             }
@@ -354,7 +358,7 @@ pub extern "C" fn MPI_Reduce(
                             std::alloc::dealloc(rbuf as *mut u8, layout);
                         }
                     }
-                    p_mpi_dec_key(comm);
+                    cg.dec_key(comm);
                     MPI_Comm_call_errhandler(comm, MPI_ERR_INTERN);
                     return MPI_ERR_INTERN;
                 }
@@ -448,7 +452,7 @@ pub extern "C" fn MPI_Reduce(
     }
 
     debug!("@@@Reduce end");
-    p_mpi_dec_key(comm);
+    cg.dec_key(comm);
 
     code
 }
@@ -497,17 +501,18 @@ pub extern "C" fn MPI_Gather(
         return MPI_SUCCESS;
     }
 
-    p_mpi_inc_key(comm);
+    let cg = Context::comm();
+    cg.inc_key(comm);
 
-    let mut stat: MPI_Status = uninit!();
+    let mut stat: MPI_Status = uninit();
     let mut code;
 
     if Context::size() == 2 {
         if Context::rank() == root {
-            let mut rext: i32 = uninit!();
+            let mut rext: i32 = uninit();
             code = MPI_Type_size(rdtype, &mut rext);
             if code != MPI_SUCCESS {
-                p_mpi_dec_key(comm);
+                cg.dec_key(comm);
                 return code;
             }
 
@@ -533,7 +538,7 @@ pub extern "C" fn MPI_Gather(
                 )
                 .is_null()
                 {
-                    p_mpi_dec_key(comm);
+                    cg.dec_key(comm);
                     MPI_Comm_call_errhandler(comm, MPI_ERR_INTERN);
                     return MPI_ERR_INTERN;
                 }
@@ -543,10 +548,10 @@ pub extern "C" fn MPI_Gather(
         }
     } else {
         if Context::rank() == root {
-            let mut rext: i32 = uninit!();
+            let mut rext: i32 = uninit();
             code = MPI_Type_size(rdtype, &mut rext);
             if code != MPI_SUCCESS {
-                p_mpi_dec_key(comm);
+                cg.dec_key(comm);
                 return code;
             }
 
@@ -562,7 +567,7 @@ pub extern "C" fn MPI_Gather(
             )
             .is_null()
             {
-                p_mpi_dec_key(comm);
+                cg.dec_key(comm);
                 MPI_Comm_call_errhandler(comm, MPI_ERR_INTERN);
                 return MPI_ERR_INTERN;
             }
@@ -587,10 +592,10 @@ pub extern "C" fn MPI_Gather(
                 );
             }
         } else {
-            let mut sext: i32 = uninit!();
+            let mut sext: i32 = uninit();
             code = MPI_Type_size(sdtype, &mut sext);
             if code != MPI_SUCCESS {
-                p_mpi_dec_key(comm);
+                cg.dec_key(comm);
                 return code;
             }
 
@@ -600,7 +605,7 @@ pub extern "C" fn MPI_Gather(
                 unsafe { Layout::from_size_align_unchecked((sext * Context::size()) as usize, 1) };
             rbuf = unsafe { std::alloc::alloc(layout) } as *mut c_void;
             if rbuf.is_null() {
-                p_mpi_dec_key(comm);
+                cg.dec_key(comm);
                 MPI_Comm_call_errhandler(comm, MPI_ERR_INTERN);
                 return MPI_ERR_INTERN;
             }
@@ -623,7 +628,7 @@ pub extern "C" fn MPI_Gather(
                 )
                 .is_null()
                 {
-                    p_mpi_dec_key(comm);
+                    cg.dec_key(comm);
                     MPI_Comm_call_errhandler(comm, MPI_ERR_INTERN);
                     return MPI_ERR_INTERN;
                 }
@@ -642,7 +647,7 @@ pub extern "C" fn MPI_Gather(
         }
     }
 
-    p_mpi_dec_key(comm);
+    cg.dec_key(comm);
     code
 }
 

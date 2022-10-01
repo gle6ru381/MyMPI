@@ -1,15 +1,13 @@
 use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion, PlotConfiguration,
+    criterion_group, criterion_main, BenchmarkId, Criterion, PlotConfiguration,
 };
 use mpi::memory::*;
 use std::alloc::*;
 use std::ffi::c_void;
-use std::fmt::Display;
-use std::ptr::{null, null_mut};
-use std::slice::{from_raw_parts, from_raw_parts_mut};
+use std::slice::{from_raw_parts_mut};
 use std::time::Duration;
 
-fn createArray(size: usize) -> Vec<i32> {
+fn create_array(size: usize) -> Vec<i32> {
     let mut vec = Vec::with_capacity(size / 4);
     for i in 0..vec.capacity() {
         vec.push(i as i32);
@@ -17,19 +15,20 @@ fn createArray(size: usize) -> Vec<i32> {
     vec
 }
 
-fn procWithArray(vec: &mut Vec<i32>) {
+fn proc_with_array(vec: &mut Vec<i32>) {
     for i in 0..vec.len() {
         vec[i] = i as i32;
     }
 }
 
 #[inline(never)]
-fn fillArray<'a>(vec: &'a mut Vec<i32>) {
+fn fill_array<'a>(vec: &'a mut Vec<i32>) {
     for i in 0..vec.len() {
         vec[i] = i as i32;
     }
 }
 
+#[allow(dead_code)]
 fn allocate_ymm(size: usize) -> (*mut c_void, *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align(size, 32).unwrap();
@@ -42,6 +41,7 @@ fn allocate_ymm(size: usize) -> (*mut c_void, *mut c_void) {
     }
 }
 
+#[allow(dead_code)]
 fn dealoc_ymm(size: usize, a: *mut c_void, b: *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align(size, 32).unwrap();
@@ -50,6 +50,7 @@ fn dealoc_ymm(size: usize, a: *mut c_void, b: *mut c_void) {
     }
 }
 
+#[allow(dead_code)]
 fn allocate_xmm(size: usize) -> (*mut c_void, *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align(size, 16).unwrap();
@@ -62,6 +63,7 @@ fn allocate_xmm(size: usize) -> (*mut c_void, *mut c_void) {
     }
 }
 
+#[allow(dead_code)]
 fn dealoc_xmm(size: usize, a: *mut c_void, b: *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align(size, 16).unwrap();
@@ -70,6 +72,7 @@ fn dealoc_xmm(size: usize, a: *mut c_void, b: *mut c_void) {
     }
 }
 
+#[allow(dead_code)]
 fn allocate_default(size: usize) -> (*mut c_void, *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align(size + 1, 1).unwrap();
@@ -82,6 +85,7 @@ fn allocate_default(size: usize) -> (*mut c_void, *mut c_void) {
     }
 }
 
+#[allow(dead_code)]
 fn dealoc_default(size: usize, a: *mut c_void, b: *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align(size + 1, 1).unwrap();
@@ -90,6 +94,7 @@ fn dealoc_default(size: usize, a: *mut c_void, b: *mut c_void) {
     }
 }
 
+#[allow(dead_code)]
 fn allocate_avx512(size: usize) -> (*mut c_void, *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align(size, 32).unwrap();
@@ -99,6 +104,7 @@ fn allocate_avx512(size: usize) -> (*mut c_void, *mut c_void) {
     }
 }
 
+#[allow(dead_code)]
 fn deallocate_avx512(size: usize, a: *mut c_void, b: *mut c_void) {
     unsafe {
         let layout = Layout::from_size_align_unchecked(size, 64);
@@ -145,9 +151,9 @@ fn cpy_benchmark(c: &mut Criterion) {
                 .x_grid_major(true)
                 .y_grid_major(true),
         );
-        g.sample_size(5);
+        g.sample_size(100);
         g.sampling_mode(criterion::SamplingMode::Linear);
-        let mut vec = createArray(vec_size);
+        let mut vec = create_array(vec_size);
         for &size in buff_vec.iter() {
             //let mut data = allocate_xmm(size);
 
@@ -170,11 +176,11 @@ fn cpy_benchmark(c: &mut Criterion) {
                 |x, size| {
                     x.iter(|| {
                         unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                        procWithArray(&mut vec);
+                        proc_with_array(&mut vec);
                     })
                 },
                 |_, _| {
-                    fillArray(unsafe { &mut *vec_ptr });
+                    fill_array(unsafe { &mut *vec_ptr });
                 },
             );
             dealoc_default(size as usize, data.0, data.1);
@@ -186,11 +192,11 @@ fn cpy_benchmark(c: &mut Criterion) {
                 |x, size| {
                     x.iter(|| {
                         ymmntcpy(data.1, data.0, *size as usize);
-                        procWithArray(&mut vec);
+                        proc_with_array(&mut vec);
                     })
                 },
                 |_, _| {
-                    fillArray(unsafe { &mut *vec_ptr });
+                    fill_array(unsafe { &mut *vec_ptr });
                 },
             );
 
@@ -200,11 +206,11 @@ fn cpy_benchmark(c: &mut Criterion) {
                 |x, size| {
                     x.iter(|| {
                         unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                        procWithArray(&mut vec);
+                        proc_with_array(&mut vec);
                     })
                 },
                 |_, _| {
-                    fillArray(unsafe { &mut *vec_ptr });
+                    fill_array(unsafe { &mut *vec_ptr });
                 },
             );
 
@@ -312,10 +318,10 @@ fn cpy_benchmark(c: &mut Criterion) {
                 .x_grid_major(true)
                 .y_grid_major(true),
         );
-        g.sample_size(5);
+        g.sample_size(100);
         for &vec_size in vec_buff.iter() {
             //let mut data = allocate_xmm(size);
-            let mut vec = createArray(vec_size);
+            let mut vec = create_array(vec_size);
 
             // g.throughput(criterion::Throughput::Bytes((vec_size + size) as u64));
             // g.bench_with_input(BenchmarkId::new("128bit", size), &size, |x, size| {
@@ -335,11 +341,11 @@ fn cpy_benchmark(c: &mut Criterion) {
                 |x, size| {
                     x.iter(|| {
                         ymmntcpy(data.1, data.0, *size as usize);
-                        procWithArray(&mut vec);
+                        proc_with_array(&mut vec);
                     })
                 },
                 |_, _| {
-                    fillArray(unsafe { &mut *vec_ptr });
+                    fill_array(unsafe { &mut *vec_ptr });
                 },
             );
             dealoc_ymm(size as usize, data.0, data.1);
@@ -351,11 +357,11 @@ fn cpy_benchmark(c: &mut Criterion) {
                 |x, size| {
                     x.iter(|| {
                         unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                        procWithArray(&mut vec);
+                        proc_with_array(&mut vec);
                     })
                 },
                 |_, _| {
-                    fillArray(unsafe { &mut *vec_ptr });
+                    fill_array(unsafe { &mut *vec_ptr });
                 },
             );
             dealoc_default(size as usize, data.0, data.1);
@@ -367,11 +373,11 @@ fn cpy_benchmark(c: &mut Criterion) {
                 |x, size| {
                     x.iter(|| {
                         unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                        procWithArray(&mut vec);
+                        proc_with_array(&mut vec);
                     })
                 },
                 |_, _| {
-                    fillArray(unsafe { &mut *vec_ptr });
+                    fill_array(unsafe { &mut *vec_ptr });
                 },
             );
 

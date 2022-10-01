@@ -100,11 +100,6 @@ where
     pub fn iter(&self) -> Iter<'_, T, N> {
         Iter::new(self)
     }
-
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.size
-    }
 }
 
 impl<T, const N: usize> Default for Queue<T, N>

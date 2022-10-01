@@ -1,8 +1,15 @@
 use std::ffi::CStr;
 
 use crate::context::Context;
-use crate::{cstr, p_mpi_abort, private::*, types::*, CommGroup};
+use crate::{cstr, p_mpi_abort, private::*, types::*};
 use zstr::zstr;
+
+type ErrHandler = fn(MPI_Comm, i32);
+const ERRH_MAX : usize = 2;
+
+pub struct HandlerContext {
+    handlers: [ErrHandler; ERRH_MAX],
+}
 
 #[macro_export]
 #[cfg(debug_assertions)]
@@ -12,7 +19,7 @@ macro_rules! MPI_CHECK {
             MPI_SUCCESS
         } else {
             debug!("Chech failed");
-            p_mpi_call_errhandler($comm, $code)
+            Context::err_handler().call($comm, $code)
         }
     };
 }
@@ -29,7 +36,7 @@ macro_rules! MPI_CHECK {
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_COMM {
     ($comm:expr) => {
-        p_mpi_check_comm($comm)
+        Context::comm().check($comm)
     };
 }
 
@@ -59,7 +66,7 @@ macro_rules! MPI_CHECK_ERRH {
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_RANK {
     ($rank:expr, $comm:expr) => {
-        p_mpi_check_rank($rank, $comm)
+        Context::comm().check_rank($rank, $comm)
     };
 }
 
@@ -113,68 +120,57 @@ macro_rules! CHECK_RET {
     };
 }
 
-const ERR_STRINGS: &'static [*const i8] = &[
-    cstr!("success"),
-    cstr!("wrong buffer"),
-    cstr!("wrong count"),
-    cstr!("wrong type"),
-    cstr!("wrong tah"),
-    cstr!("wrong communicator"),
-    cstr!("wrong rank"),
-    cstr!("wrong request"),
-    cstr!("wrong root"),
-    cstr!("wrong reduction operation"),
-    cstr!("wrong argument"),
-    cstr!("unknown error"),
-    cstr!("buffer truncated"),
-    cstr!("other error"),
-    cstr!("internal error"),
-];
+impl HandlerContext {
+    const ERR_STRINGS: &'static [*const i8] = &[
+        cstr!("success"),
+        cstr!("wrong buffer"),
+        cstr!("wrong count"),
+        cstr!("wrong type"),
+        cstr!("wrong tah"),
+        cstr!("wrong communicator"),
+        cstr!("wrong rank"),
+        cstr!("wrong request"),
+        cstr!("wrong root"),
+        cstr!("wrong reduction operation"),
+        cstr!("wrong argument"),
+        cstr!("unknown error"),
+        cstr!("buffer truncated"),
+        cstr!("other error"),
+        cstr!("internal error"),
+    ];
 
-type ErrHandler = fn(&MPI_Comm, &mut i32);
-const ERRH_MAX: i32 = 2;
+    pub const fn new() -> Self {
+        HandlerContext { handlers: [p_mpi_errors_are_fatal, p_mpi_errors_return] }
+    }
 
-pub(crate) fn p_mpi_errors_are_fatal(pcomm: &MPI_Comm, pcode: &mut i32) {
+    pub fn err_to_string(err: i32) -> *const i8 {
+        Self::ERR_STRINGS[err as usize]
+    }
+
+    pub fn check(comm: MPI_Comm, errh: MPI_Errhandler) -> i32 {
+        MPI_CHECK!(errh >= 0 && errh < ERRH_MAX as i32, comm, MPI_ERR_ARG)
+    }
+
+    pub fn call(&self, comm: MPI_Comm, code: MPI_Errhandler) -> i32 {
+        let errh = Context::comm().err_handler(comm);
+        debug_assert!(errh >= 0 && errh < ERRH_MAX as i32);
+
+        self.handlers[errh as usize](comm, code);
+        code
+    }
+}
+
+fn p_mpi_errors_are_fatal(pcomm: MPI_Comm, pcode: i32) {
     println!("MPI fatal error for {}, code: {pcode}", Context::rank());
-    p_mpi_abort(*pcomm, *pcode);
+    p_mpi_abort(pcomm, pcode);
 }
 
-pub(crate) fn p_mpi_errors_return(pcomm: &MPI_Comm, pcode: &mut i32) {}
-
-static ERRH: [ErrHandler; ERRH_MAX as usize] = [p_mpi_errors_are_fatal, p_mpi_errors_return];
-
-pub(crate) fn p_mpi_check_errh(comm: MPI_Comm, errh: MPI_Errhandler) {
-    MPI_CHECK!(errh >= 0 && errh < ERRH_MAX, comm, MPI_ERR_ARG);
-}
-
-pub(crate) fn p_mpi_call_errhandler(comm: MPI_Comm, code: i32) -> i32 {
-    let errh = CommGroup::err_handler(comm);
-
-    debug_assert!(errh >= 0 && errh < ERRH_MAX);
-
-    let mut ret = code;
-
-    ERRH[errh as usize](&comm, &mut ret);
-
-    ret
-}
-
-pub(crate) fn p_mpi_errh_init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
-    debug_assert!(!Context::is_init());
-    debug_assert!(!pargc.is_null());
-    debug_assert!(!pargv.is_null());
-
-    MPI_SUCCESS
-}
-
-pub(crate) fn p_mpi_errh_fini() -> i32 {
-    debug_assert!(Context::is_init());
-
-    MPI_SUCCESS
+fn p_mpi_errors_return(_: MPI_Comm, pcode: i32) {
+    println!("MPI simple error for {}, code: {pcode}", Context::rank())
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_call_errhandler(comm: MPI_Comm, code: i32) -> i32 {
+pub extern "C" fn MPI_Comm_call_errhandler(_: MPI_Comm, _: i32) -> i32 {
     MPI_SUCCESS
 }
 
@@ -205,12 +201,12 @@ pub extern "C" fn MPI_Error_string(code: i32, str: *mut i8, plen: *mut i32) -> i
     MPI_CHECK!(!plen.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
 
     let len = unsafe {
-        CStr::from_ptr(ERR_STRINGS[code as usize])
+        CStr::from_ptr(HandlerContext::err_to_string(code))
             .to_bytes_with_nul()
             .len()
     };
     unsafe {
-        str.copy_from(ERR_STRINGS[code as usize], len);
+        str.copy_from(HandlerContext::err_to_string(code), len);
         plen.write(len as i32);
     };
 
