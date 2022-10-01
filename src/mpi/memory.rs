@@ -1,7 +1,7 @@
 use std::arch::asm;
 use std::ffi::c_void;
-use std::slice::from_raw_parts_mut;
 
+#[cfg(target_feature = "avx2")]
 pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 256 {
@@ -104,14 +104,59 @@ pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) 
     }
 }
 
+#[cfg(target_feature = "avx2")]
+pub fn ymmntcpy_aligned(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
+    unsafe {
+        if size % 256 == 0 {
+            asm!(
+                "2:",
+                "vmovntdqa {temp0}, [{src} + 0]",
+                "vmovntdqa {temp1}, [{src} + 32]",
+                "vmovntdqa {temp2}, [{src} + 64]",
+                "vmovntdqa {temp3}, [{src} + 96]",
+                "vmovntdqa {temp4}, [{src} + 128]",
+                "vmovntdqa {temp5}, [{src} + 160]",
+                "vmovntdqa {temp6}, [{src} + 192]",
+                "vmovntdqa {temp7}, [{src} + 224]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 32], {temp1}",
+                "vmovntdq [{dest} + 64], {temp2}",
+                "vmovntdq [{dest} + 96], {temp3}",
+                "vmovntdq [{dest} + 128], {temp4}",
+                "vmovntdq [{dest} + 160], {temp5}",
+                "vmovntdq [{dest} + 192], {temp6}",
+                "vmovntdq [{dest} + 224], {temp7}",
+                "add {dest}, 256",
+                "add {src}, 256",
+                "sub {size}, 256",
+                "jg 2b",
+                dest = inout(reg) dest,
+                src = inout(reg) src,
+                size = inout(reg) size,
+                temp0 = out(ymm_reg) _,
+                temp1 = out(ymm_reg) _,
+                temp2 = out(ymm_reg) _,
+                temp3 = out(ymm_reg) _,
+                temp4 = out(ymm_reg) _,
+                temp5 = out(ymm_reg) _,
+                temp6 = out(ymm_reg) _,
+                temp7 = out(ymm_reg) _,
+            )
+        } else {
+            unreachable!();
+        }
+    }
+}
+
+#[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 256 {
             asm!(
                 "prefetchnta [{src} + 256]",
-                "prefetchnta [{src} + 320]",
-                "prefetchnta [{src} + 384]",
-                "prefetchnta [{src} + 448]",
+//                "prefetchnta [{src} + 320]",
+//                "prefetchnta [{src} + 384]",
+//                "prefetchnta [{src} + 448]",
                 "vmovntdqa {temp0}, [{src} + 0]",
                 "vmovntdqa {temp1}, [{src} + 32]",
                 "vmovntdqa {temp2}, [{src} + 64]",
@@ -210,6 +255,7 @@ pub fn ymmntcpy_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size
     }
 }
 
+#[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_short(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 64 {
@@ -258,6 +304,7 @@ pub fn ymmntcpy_short(mut dest: *mut c_void, mut src: *const c_void, mut size: u
     }
 }
 
+#[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_short_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         while size >= 64 {
@@ -307,6 +354,7 @@ pub fn ymmntcpy_short_prefetch(mut dest: *mut c_void, mut src: *const c_void, mu
     }
 }
 
+#[cfg(target_feature = "avx")]
 pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
     unsafe {
         while n >= 128 {
@@ -397,6 +445,7 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
     }
 }
 
+#[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_prefetch_aligned(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         if size % 256 == 0 {
@@ -444,6 +493,7 @@ pub fn ymmntcpy_prefetch_aligned(mut dest: *mut c_void, mut src: *const c_void, 
     }
 }
 
+#[cfg(target_feature = "avx2")]
 pub fn ymmntcpy_short_prefetch_aligned(
     mut dest: *mut c_void,
     mut src: *const c_void,

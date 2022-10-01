@@ -17,7 +17,6 @@ fn createArray(size: usize) -> Vec<i32> {
     vec
 }
 
-#[inline(never)]
 fn procWithArray(vec: &mut Vec<i32>) {
     for i in 0..vec.len() {
         vec[i] = i as i32;
@@ -25,7 +24,7 @@ fn procWithArray(vec: &mut Vec<i32>) {
 }
 
 #[inline(never)]
-fn fillArray(vec: &mut Vec<i32>) {
+fn fillArray<'a>(vec: &'a mut Vec<i32>) {
     for i in 0..vec.len() {
         vec[i] = i as i32;
     }
@@ -108,26 +107,45 @@ fn deallocate_avx512(size: usize, a: *mut c_void, b: *mut c_void) {
     }
 }
 
+fn bytes_format(bytes: usize) -> String {
+    if bytes < 1024 {
+        format!("{bytes}b")
+    } else if bytes < 1024 * 1024 {
+        format!("{}Kb", bytes / 1024)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{}Mb", bytes / (1024 * 1024))
+    } else {
+        format!("{}Gb", bytes / (1024 * 1024 * 1024))
+    }
+}
+
 fn cpy_benchmark(c: &mut Criterion) {
     c.without_output();
-    let buff_vec = vec![4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 4194304, 8388608, 16777216, 33554432, 67108864];
-    let vec_buff = vec![4096, 16384, 131072, 262144, 524288, 786432, 1048576, 4194304, 6291456, 7876608];
+    let buff_vec = vec![
+        4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304,
+        8388608, 16777216, 33554432, 67108864,
+    ];
+    let vec_buff = vec![
+        4096, 16384, 131072, 262144, 524288, 786432, 1048576, 2097152, 4194304, 6291456, 7876608,
+        8388608,
+    ];
     for &vec_size in vec_buff.iter() {
-        let mut g = c.benchmark_group(format!("Copy_vec_size_{vec_size}"));
+        let mut g = c.benchmark_group(format!("Vector size: {}", bytes_format(vec_size)));
         g.noise_threshold(0.05);
         g.significance_level(0.0001);
         g.confidence_level(0.99999);
         g.warm_up_time(Duration::from_nanos(1));
+        g.measurement_time(Duration::from_secs(20));
         g.plot_config(
             PlotConfiguration::default()
-            .y_scale(criterion::AxisScale::Logarithmic)
-            .x_scale(criterion::AxisScale::Logarithmic)
-            .tics(buff_vec.clone())
-            .x_label(format!("Buffer size"))
-            .x_grid_major(true)
-            .y_grid_major(true)
+                .y_scale(criterion::AxisScale::Logarithmic)
+                .x_scale(criterion::AxisScale::Logarithmic)
+                .tics(buff_vec.clone())
+                .x_label(format!("Buffer size"))
+                .x_grid_major(true)
+                .y_grid_major(true),
         );
-        g.sample_size(10);
+        g.sample_size(5);
         g.sampling_mode(criterion::SamplingMode::Linear);
         let mut vec = createArray(vec_size);
         for &size in buff_vec.iter() {
@@ -143,42 +161,64 @@ fn cpy_benchmark(c: &mut Criterion) {
             // });
             // dealoc_xmm(size, data.0, data.1);
 
+            let vec_ptr: *mut Vec<i32> = &mut vec;
+
             let mut data = allocate_default(size as usize);
-            g.bench_with_input(BenchmarkId::new("Default", size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                    procWithArray(&mut vec);
-                })
-            });
+            g.bench_with_input_prepare(
+                BenchmarkId::new("Default", size),
+                &size,
+                |x, size| {
+                    x.iter(|| {
+                        unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
+                        procWithArray(&mut vec);
+                    })
+                },
+                |_, _| {
+                    fillArray(unsafe { &mut *vec_ptr });
+                },
+            );
             dealoc_default(size as usize, data.0, data.1);
 
             data = allocate_ymm(size as usize);
-            g.bench_with_input(BenchmarkId::new("256bit", size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    ymmntcpy(data.1, data.0, *size as usize);
-                    procWithArray(&mut vec);
-                })
-            });
+            g.bench_with_input_prepare(
+                BenchmarkId::new("Non temporal", size),
+                &size,
+                |x, size| {
+                    x.iter(|| {
+                        ymmntcpy(data.1, data.0, *size as usize);
+                        procWithArray(&mut vec);
+                    })
+                },
+                |_, _| {
+                    fillArray(unsafe { &mut *vec_ptr });
+                },
+            );
 
-            g.bench_with_input(BenchmarkId::new("Default_align", size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                    procWithArray(&mut vec);
-                })
-            });
+            g.bench_with_input_prepare(
+                BenchmarkId::new("Default align", size),
+                &size,
+                |x, size| {
+                    x.iter(|| {
+                        unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
+                        procWithArray(&mut vec);
+                    })
+                },
+                |_, _| {
+                    fillArray(unsafe { &mut *vec_ptr });
+                },
+            );
 
-            // g.bench_with_input(
+            // g.bench_with_input_prepare(
             //     BenchmarkId::new("256bit_prefetch", size),
             //     &size,
             //     |x, size| {
             //         x.iter(|| {
-            //             fillArray(&mut vec);
-            //             ymmntcpy_prefetch(data.1, data.0, *size);
+            //             ymmntcpy_prefetch(data.1, data.0, *size as usize);
             //             procWithArray(&mut vec);
             //         })
+            //     },
+            //     |_, _| {
+            //         fillArray(unsafe { &mut *vec_ptr });
             //     },
             // );
 
@@ -202,21 +242,41 @@ fn cpy_benchmark(c: &mut Criterion) {
             //     },
             // );
 
-            g.bench_with_input(BenchmarkId::new("256bit_short_prefetch_aligned", size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    ymmntcpy_short_prefetch_aligned(data.1, data.0, *size as usize);
-                    procWithArray(&mut vec);
-                })
-            });
+            // g.bench_with_input_prepare(
+            //     BenchmarkId::new("256bit_aligned", size),
+            //     &size,
+            //     |x, size| {
+            //         x.iter(|| {
+            //             ymmntcpy_aligned(data.1, data.0, *size as usize);
+            //             procWithArray(&mut vec);
+            //         })
+            //     },
+            //     |_, _| {
+            //         fillArray(unsafe { &mut *vec_ptr });
+            //     },
+            // );
 
-            g.bench_with_input(BenchmarkId::new("256bit_prefetch_aligned", size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    ymmntcpy_prefetch_aligned(data.1, data.0, *size as usize);
-                    procWithArray(&mut vec);
-                })
-            });
+            // g.bench_with_input(BenchmarkId::new("256bit_short_prefetch_aligned", size), &size, |x, size| {
+            //     x.iter(|| {
+            //         fillArray(&mut vec);
+            //         ymmntcpy_short_prefetch_aligned(data.1, data.0, *size as usize);
+            //         procWithArray(&mut vec);
+            //     })
+            // });
+
+            // g.bench_with_input_prepare(
+            //     BenchmarkId::new("256bit_prefetch_aligned", size),
+            //     &size,
+            //     |x, size| {
+            //         x.iter(|| {
+            //             ymmntcpy_prefetch_aligned(data.1, data.0, *size as usize);
+            //             procWithArray(&mut vec);
+            //         })
+            //     },
+            //     |_, _| {
+            //         fillArray(unsafe { &mut *vec_ptr });
+            //     },
+            // );
             dealoc_ymm(size as usize, data.0, data.1);
 
             // data = allocate_avx512(size);
@@ -236,22 +296,23 @@ fn cpy_benchmark(c: &mut Criterion) {
     }
 
     for &size in buff_vec.iter() {
-        let mut g = c.benchmark_group(format!("Copy_buf_size_{size}"));
+        let mut g = c.benchmark_group(format!("Buffer size: {}", bytes_format(size as usize)));
         g.noise_threshold(0.05);
         g.significance_level(0.0001);
         g.confidence_level(0.99999);
         g.warm_up_time(Duration::from_nanos(1));
         g.sampling_mode(criterion::SamplingMode::Linear);
+        g.measurement_time(Duration::from_secs(20));
         g.plot_config(
             PlotConfiguration::default()
-            .y_scale(criterion::AxisScale::Logarithmic)
-            .x_scale(criterion::AxisScale::Logarithmic)
-            .tics(buff_vec.clone())
-            .x_label(format!("Buffer size"))
-            .x_grid_major(true)
-            .y_grid_major(true)
+                .y_scale(criterion::AxisScale::Logarithmic)
+                .x_scale(criterion::AxisScale::Logarithmic)
+                .tics(buff_vec.clone())
+                .x_label(format!("Vector size"))
+                .x_grid_major(true)
+                .y_grid_major(true),
         );
-        g.sample_size(100);
+        g.sample_size(5);
         for &vec_size in vec_buff.iter() {
             //let mut data = allocate_xmm(size);
             let mut vec = createArray(vec_size);
@@ -265,35 +326,54 @@ fn cpy_benchmark(c: &mut Criterion) {
             //     })
             // });
             // dealoc_xmm(size, data.0, data.1);
+            let vec_ptr: *mut Vec<i32> = &mut vec;
 
             let mut data = allocate_ymm(size as usize);
-            g.bench_with_input(BenchmarkId::new("256bit", vec_size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    ymmntcpy(data.1, data.0, *size as usize);
-                    procWithArray(&mut vec);
-                })
-            });
+            g.bench_with_input_prepare(
+                BenchmarkId::new("Non temporal", vec_size),
+                &size,
+                |x, size| {
+                    x.iter(|| {
+                        ymmntcpy(data.1, data.0, *size as usize);
+                        procWithArray(&mut vec);
+                    })
+                },
+                |_, _| {
+                    fillArray(unsafe { &mut *vec_ptr });
+                },
+            );
             dealoc_ymm(size as usize, data.0, data.1);
 
             data = allocate_default(size as usize);
-            g.bench_with_input(BenchmarkId::new("Default", vec_size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                    procWithArray(&mut vec);
-                })
-            });
+            g.bench_with_input_prepare(
+                BenchmarkId::new("Default", vec_size),
+                &size,
+                |x, size| {
+                    x.iter(|| {
+                        unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
+                        procWithArray(&mut vec);
+                    })
+                },
+                |_, _| {
+                    fillArray(unsafe { &mut *vec_ptr });
+                },
+            );
             dealoc_default(size as usize, data.0, data.1);
 
             data = allocate_ymm(size as usize);
-            g.bench_with_input(BenchmarkId::new("Default_align", vec_size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
-                    procWithArray(&mut vec);
-                })
-            });
+            g.bench_with_input_prepare(
+                BenchmarkId::new("Default align", vec_size),
+                &size,
+                |x, size| {
+                    x.iter(|| {
+                        unsafe { std::ptr::copy(data.1, data.0, *size as usize) };
+                        procWithArray(&mut vec);
+                    })
+                },
+                |_, _| {
+                    fillArray(unsafe { &mut *vec_ptr });
+                },
+            );
 
             // g.bench_with_input(
             //     BenchmarkId::new("256bit_prefetch", size),
@@ -327,21 +407,29 @@ fn cpy_benchmark(c: &mut Criterion) {
             //     },
             // );
 
-            g.bench_with_input(BenchmarkId::new("256bit_short_prefetch_aligned", vec_size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    ymmntcpy_short_prefetch_aligned(data.1, data.0, *size as usize);
-                    procWithArray(&mut vec);
-                })
-            });
+            // g.bench_with_input(
+            //     BenchmarkId::new("256bit_short_prefetch_aligned", vec_size),
+            //     &size,
+            //     |x, size| {
+            //         x.iter(|| {
+            //             fillArray(&mut vec);
+            //             ymmntcpy_short_prefetch_aligned(data.1, data.0, *size as usize);
+            //             procWithArray(&mut vec);
+            //         })
+            //     },
+            // );
 
-            g.bench_with_input(BenchmarkId::new("256bit_prefetch_aligned", vec_size), &size, |x, size| {
-                x.iter(|| {
-                    fillArray(&mut vec);
-                    ymmntcpy_prefetch_aligned(data.1, data.0, *size as usize);
-                    procWithArray(&mut vec);
-                })
-            });
+            // g.bench_with_input(
+            //     BenchmarkId::new("256bit_prefetch_aligned", vec_size),
+            //     &size,
+            //     |x, size| {
+            //         x.iter(|| {
+            //             fillArray(&mut vec);
+            //             ymmntcpy_prefetch_aligned(data.1, data.0, *size as usize);
+            //             procWithArray(&mut vec);
+            //         })
+            //     },
+            // );
             dealoc_ymm(size as usize, data.0, data.1);
 
             // data = allocate_avx512(size);

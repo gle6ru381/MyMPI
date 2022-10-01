@@ -27,7 +27,7 @@ pub use xfer::*;
 mod tests {
     use std::{
         alloc::{alloc, dealloc, Layout},
-        slice::from_raw_parts_mut,
+        slice::{from_raw_parts_mut, from_raw_parts},
         time::{Duration, Instant},
     };
 
@@ -143,7 +143,9 @@ mod tests {
             fillArray(&mut vec);
 
             let now = Instant::now();
-            b.as_mut_ptr().copy_from(a.as_ptr(), size);
+            let bb = (b.as_mut_ptr() as *mut u8).add(1);
+            let ba = (a.as_ptr() as *mut u8).add(1);
+            bb.copy_from(ba, size);
             let time = now.elapsed().as_micros();
 
             let now = Instant::now();
@@ -164,21 +166,31 @@ mod tests {
     }
 
     #[inline(never)]
+    fn get_array(layout: Layout, size: usize) -> *mut i32 {
+        let a = unsafe {from_raw_parts_mut(alloc(layout) as *mut i32, size)};
+        for (i, val) in a.iter_mut().enumerate() {
+            *val = (i * 4) as i32;
+        }
+        a.as_mut_ptr()
+    }
+
+    #[inline(never)]
     fn test_default_aligned(size: usize) -> (u128, u128) {
         unsafe {
             let layout = Layout::from_size_align_unchecked(size * 4, 64);
             let mut vec = createArray();
-            let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
-            for (i, val) in a.iter_mut().enumerate() {
-                *val = (i * 4) as i32;
-            }
+            // let a = from_raw_parts_mut(alloc(layout) as *mut i32, size);
+            // for (i, val) in a.iter_mut().enumerate() {
+            //     *val = (i * 4) as i32;
+            // }
             let b = from_raw_parts_mut(alloc(layout) as *mut i32, size);
 
             //fillArray(&mut vec);
 
             //let now = Instant::now();
             let tb = b.as_mut_ptr();
-            let ta = a.as_mut_ptr();
+            let ta = get_array(layout, size);
+            let a = from_raw_parts(ta, size);
             tb.copy_from(ta, size);
             //let time = now.elapsed().as_micros();
             let time = 0;
@@ -192,7 +204,7 @@ mod tests {
                 assert_eq!(a[i], b[i]);
             }
 
-            dealloc(a.as_mut_ptr() as *mut u8, layout);
+            dealloc(ta as *mut u8, layout);
             dealloc(b.as_mut_ptr() as *mut u8, layout);
 
             (time, arr_time)
@@ -357,7 +369,7 @@ mod tests {
 
             // time = (0, 0);
             for _ in 0..LOOPS {
-                let val = test_default_aligned(size);
+                let val = test_default(size);
                 time.0 += val.0;
                 time.1 += val.1;
             }
