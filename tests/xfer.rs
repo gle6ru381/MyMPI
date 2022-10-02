@@ -171,3 +171,47 @@ fn test_obj() {
         obj.send(&vec![5, 4, 3, 2, 1], 0, 10, MPI_COMM_WORLD);
     }
 }
+
+#[test]
+fn test_obj_async() {
+    set_var("MPI_SIZE", "2");
+
+    let mut obj = MpiObject::new();
+    let rank = MpiObject::rank();
+
+    if rank == 0 {
+        let mut req = obj
+            .send_req_str("First String", 1, 5, MPI_COMM_WORLD)
+            .unwrap();
+        let mut req2 = obj
+            .send_req_raw(&[100, 52141, 7765, -1241], 1, 0, MPI_COMM_WORLD)
+            .unwrap();
+        obj.wait_all(&mut [req.request(), req2.request()]);
+        let mut req = obj.recv_req::<u8>(15, 1, 0, MPI_COMM_WORLD).unwrap();
+        let mut req2 = obj.recv_req::<i32>(8, 1, 5, MPI_COMM_WORLD).unwrap();
+        let val = String::from_utf8_lossy(req.data());
+        assert_eq!(val, "Hello world!!!!");
+        assert_eq!(
+            req2.data(),
+            [-110, 0, 2412, 66654, 41241, 586764, -24124, 4241]
+        );
+    } else {
+        let mut req = obj.recv_req::<i32>(4, 0, 0, MPI_COMM_WORLD).unwrap();
+        let mut req2 = obj.recv_str(12, 0, 5, MPI_COMM_WORLD).unwrap();
+        assert_eq!(req.data(), [100, 52141, 7765, -1241]);
+        let val = String::from_utf8_lossy(req2.into_slice());
+        assert_eq!(val, "First String");
+        let mut req = obj
+            .send_req_raw(
+                &[-110, 0, 2412, 66654, 41241, 586764, -24124, 4241],
+                0,
+                5,
+                MPI_COMM_WORLD,
+            )
+            .unwrap();
+        let mut req2 = obj
+            .send_req_str("Hello world!!!!", 0, 0, MPI_COMM_WORLD)
+            .unwrap();
+        obj.wait_all(&mut [req.request(), req2.request()]);
+    }
+}

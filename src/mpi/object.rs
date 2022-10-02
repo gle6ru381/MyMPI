@@ -103,11 +103,20 @@ impl<T: Typed> Promise<T> {
         Promise { data, req }
     }
 
+    #[must_use]
+    pub fn request(&mut self) -> MPI_Request {
+        std::mem::replace(&mut self.req, null_mut())
+    }
+
+    pub(crate) fn release(&mut self) {
+        self.req = null_mut();
+    }
+
     pub fn wait(&mut self) -> i32 {
         debug_assert!(!self.req.is_null());
         let res = P_MPI_Request::wait(&mut self.req, null_mut());
         if res == MPI_SUCCESS {
-            self.req = null_mut();
+            self.release();
         }
         res
     }
@@ -174,6 +183,21 @@ impl MpiObject {
     }
 
     #[must_use]
+    pub fn send_req_str(
+        &mut self,
+        str: &str,
+        rank: i32,
+        tag: i32,
+        comm: MPI_Comm,
+    ) -> Option<Promise<u8>> {
+        self.send_req_raw(str.as_bytes(), rank, tag, comm)
+    }
+
+    pub fn send_str(&mut self, str: &str, rank: i32, tag: i32, comm: MPI_Comm) -> bool {
+        self.send_raw(str.as_bytes(), rank, tag, comm)
+    }
+
+    #[must_use]
     pub fn send_req_raw<'a, T: Typed>(
         &mut self,
         buff: &'a [T],
@@ -228,6 +252,17 @@ impl MpiObject {
     }
 
     #[must_use]
+    pub fn recv_str(
+        &mut self,
+        size: usize,
+        rank: i32,
+        tag: i32,
+        comm: MPI_Comm,
+    ) -> Option<Data<u8>> {
+        self.recv::<u8>(size, rank, tag, comm)
+    }
+
+    #[must_use]
     pub fn recv<T: Typed>(
         &mut self,
         size: usize,
@@ -245,5 +280,11 @@ impl MpiObject {
             return None;
         }
         Some(promise.into_data())
+    }
+
+    pub fn wait_all<const N: usize>(&mut self, reqs: &mut [MPI_Request; N]) -> bool {
+        let mut stats = [MPI_Status::uninit(); N];
+        self.error = P_MPI_Request::wait_all(reqs, &mut stats);
+        self.error == MPI_SUCCESS
     }
 }

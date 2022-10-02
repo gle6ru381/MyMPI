@@ -33,6 +33,7 @@ impl Typed for i8 {
 }
 
 impl Typed for u8 {
+    const ALIGN: usize = 1;
     fn into_mpi() -> i32 {
         MPI_BYTE
     }
