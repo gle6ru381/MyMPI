@@ -136,10 +136,12 @@ impl ShmData {
 
     #[inline(always)]
     pub fn find_unexp(&mut self, rank: i32, tag: i32) -> MPI_Request {
-        debug!("Unexpect find with len: {}", self.unexp_queue.len());
         if self.unexp_queue.len() != 0 {
             let val = self.unexp_queue.iter().next().unwrap();
-            debug!("Find: {rank}:{tag}, Data: {}:{}", val.rank, val.tag);
+            debug!(
+                "Find unexpect: {rank}:{tag}, Data: {}:{}",
+                val.rank, val.tag
+            );
         }
         self.unexp_queue.find_by_tag(rank, tag)
     }
@@ -224,11 +226,12 @@ impl ShmData {
                 .unwrap()
         };
 
+        debug!("Recv flag: {}", pshm.recv_cell().flag());
         pshm.recv_cell().wait_ne(0);
 
         let mut unexp = false;
         if req.tag != pshm.recv_cell().tag as i32 {
-            println!("##{} Find unexpect", Context::rank());
+            debug!("{} Find unexpect", Context::rank());
             let preqx = d.unexp_queue.push();
             if preqx.is_some() {
                 let reqx = unsafe { preqx.unwrap_unchecked() };
@@ -248,12 +251,12 @@ impl ShmData {
             let layout = std::alloc::Layout::from_size_align(req.cnt as usize, 1).unwrap();
             let buf = unsafe { std::alloc::alloc(layout) };
             if buf.is_null() {
-                println!("Error allocate unexpected buffer");
+                debug!("Error allocate unexpected buffer");
                 return MPI_ERR_OTHER;
             }
             req.buf = buf as *mut c_void;
         } else if req.cnt < pshm.recv_cell().len {
-            println!("Truncate error for recv");
+            debug!("Truncate error for recv");
             return MPI_ERR_TRUNCATE;
         } else {
             req.cnt = pshm.recv_cell().len;
@@ -261,7 +264,7 @@ impl ShmData {
 
         let mut length = req.cnt as usize;
         let mut buf = req.buf;
-        println!("Recv length: {length}");
+        debug!("Recv length: {length}");
         while length > Cell::buf_len() {
             unsafe {
                 buf.copy_from(
@@ -288,7 +291,7 @@ impl ShmData {
         req.stat.cnt = req.cnt;
         req.flag = 1;
 
-        println!(
+        debug!(
             "Success recover for {}, buffer: {}",
             Context::rank(),
             req.buf.is_null()
@@ -309,14 +312,14 @@ impl ShmData {
                 .as_mut()
                 .unwrap_unchecked()
         };
-
+        debug!("Send cell flag: {}", pshm.send_cell().flag());
         pshm.send_cell().wait_eq(0);
 
         let mut length = req.cnt as usize;
         let mut buf = req.buf;
         pshm.send_cell().len = req.cnt;
         pshm.send_cell().tag = req.tag;
-        println!("Send length: {length}");
+        debug!("Send length: {length}");
 
         while length > Cell::buf_len() {
             unsafe {
@@ -344,7 +347,7 @@ impl ShmData {
         req.stat.cnt = req.cnt;
         req.flag = 1;
 
-        println!("Success send for {}", Context::rank());
+        debug!("Success send for {}", Context::rank());
 
         MPI_SUCCESS
     }

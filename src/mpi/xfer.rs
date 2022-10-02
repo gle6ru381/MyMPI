@@ -15,10 +15,12 @@ pub struct Buffer {
 }
 
 pub trait Typed {
+    const ALIGN: usize = 1;
     fn into_mpi() -> i32;
 }
 
 impl Typed for i32 {
+    const ALIGN: usize = 4;
     fn into_mpi() -> i32 {
         MPI_INT
     }
@@ -37,6 +39,7 @@ impl Typed for u8 {
 }
 
 impl Typed for f64 {
+    const ALIGN: usize = 8;
     fn into_mpi() -> i32 {
         MPI_DOUBLE
     }
@@ -70,9 +73,9 @@ impl P_MPI_Request {
 
     pub fn wait(preq: &mut MPI_Request, pstat: *mut MPI_Status) -> i32 {
         let mut flag = 0;
+        debug!("Call wait");
         while flag == 0 {
             let code = Self::test(preq, &mut flag, pstat);
-            debug!("Flag test: {}", flag);
             if code != MPI_SUCCESS {
                 return code;
             }
@@ -134,9 +137,38 @@ impl Buffer {
         }
     }
 
+    pub const fn from_type<'a, T: Typed>(data: &'a [T], dtype: i32) -> Self {
+        Buffer {
+            buf: data.as_ptr() as *mut c_void,
+            cnt: data.len() as i32,
+            dtype,
+            rank: 0,
+            tag: 0,
+            comm: 0,
+        }
+    }
+
+    pub fn from_type_mut<'a, T: Typed>(data: &'a mut [T], dtype: i32) -> Self {
+        Buffer {
+            buf: data.as_ptr() as *mut c_void,
+            cnt: data.len() as i32,
+            dtype,
+            rank: 0,
+            tag: 0,
+            comm: 0,
+        }
+    }
+
     #[must_use]
     pub fn from<'a, T: Typed>(data: &'a [T]) -> Self {
-        Buffer { buf: data.as_ptr() as *mut c_void, cnt: data.len() as i32, dtype: T::into_mpi(), rank: 0, tag: 0, comm: 0 }
+        Buffer {
+            buf: data.as_ptr() as *mut c_void,
+            cnt: data.len() as i32,
+            dtype: T::into_mpi(),
+            rank: 0,
+            tag: 0,
+            comm: 0,
+        }
     }
 
     #[must_use]
@@ -147,17 +179,17 @@ impl Buffer {
             dtype: T::into_mpi(),
             rank: 0,
             tag: 0,
-            comm: 0
-        }        
+            comm: 0,
+        }
     }
 
     #[must_use]
-    pub fn set_data<'a, D: Typed, T: Deref<Target=[D]>>(self, data: &'a T) -> Self {
+    pub fn set_data<'a, D: Typed, T: Deref<Target = [D]>>(self, data: &'a T) -> Self {
         self.set_data_raw(data.deref())
     }
 
     #[must_use]
-    pub fn set_data_mut<'a, D: Typed, T: DerefMut<Target=[D]>>(self, data: &'a mut T) -> Self {
+    pub fn set_data_mut<'a, D: Typed, T: DerefMut<Target = [D]>>(self, data: &'a mut T) -> Self {
         self.set_data_raw_mut(&mut data.deref_mut())
     }
 
@@ -201,14 +233,14 @@ impl Buffer {
         unsafe { from_raw_parts(self.buf as *const T, self.cnt as usize) }
     }
 
-    pub unsafe fn data_mut_unchecked<'a, T:Typed>(&'a mut self, size: usize) -> &'a mut [T] {
+    pub unsafe fn data_mut_unchecked<'a, T: Typed>(&'a mut self, size: usize) -> &'a mut [T] {
         from_raw_parts_mut(self.buf as *mut T, size as usize)
     }
 
     pub fn data_mut<'a, T: Typed>(&'a mut self, size: usize) -> &'a mut [T] {
         debug_assert_eq!(T::into_mpi(), self.dtype);
         debug_assert!(size < self.bytes() as usize);
-        unsafe {self.data_mut_unchecked(size)}
+        unsafe { self.data_mut_unchecked(size) }
     }
 
     pub fn rank(&self) -> i32 {

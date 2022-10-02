@@ -3,7 +3,7 @@ use std::{
     alloc::{alloc, dealloc, Layout},
     env::set_var,
     ffi::CStr,
-    ptr::{null, null_mut},
+    ptr::null_mut,
 };
 
 #[test]
@@ -149,49 +149,25 @@ fn test_p2p_unexpect() {
     MPI_Finalize();
 }
 
-// #[test]
-// fn test_buff() {
-//     set_var("MPI_SIZE", "2");
-//     MPI_Init(null_mut(), null_mut());
-//     let mut rank = 0;
-//     let mut size = 0;
+#[test]
+fn test_obj() {
+    set_var("MPI_SIZE", "2");
 
-//     MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
-//     MPI_Comm_size(MPI_COMM_WORLD, &mut size);
+    let mut obj = MpiObject::new();
+    //let size = MpiObject::size();
+    let rank = MpiObject::rank();
 
-//     if rank == 0 {
-//         let mut buff = Buffer::from(b"Hello world!!!")
-//             .set_comm(MPI_COMM_WORLD)
-//             .set_rank(1)
-//             .set_tag(0);
-//         let mut obj = MpiObject::new();
-//         obj.send(&buff);
-//         buff = buff.set_data(&vec![1, 2, 3, 4, 5]).set_tag(1);
-//         obj.send(&buff);
-//         buff = buff.set_data_raw("data".as_bytes()).set_tag(2);
-//         obj.send(&buff);
-//         obj.wait_all(None);
-//     } else {
-//         let mut buff = Buffer::from_mut(&mut [0u8; 100])
-//             .set_comm(MPI_COMM_WORLD)
-//             .set_rank(0)
-//             .set_tag(0);
-//         let mut obj = MpiObject::new();
-//         let idx = obj.recv(&buff);
-//         obj.wait(idx);
-//         let data = unsafe {CStr::from_ptr(buff.data().as_ptr()).to_str().unwrap()};
-//         assert_eq!(data, "Hello world!!!");
-//         buff = buff.set_tag(1);
-//         let idx = obj.recv(&buff);
-//         obj.wait(idx);
-//         let data: Vec<i32> = Vec::from(buff.data_mut());
-//         assert_eq!(data, vec![1, 2, 3, 4, 5]);
-//         buff = buff.set_tag(2);
-//         let idx = obj.recv(&buff);
-//         obj.wait(idx);
-//         let data = unsafe {CStr::from_ptr(buff.data().as_ptr()).to_str().unwrap()};
-//         assert_eq!(data, "data");
-//     }
-
-//     MPI_Finalize();
-// }
+    if rank == 0 {
+        obj.send_raw(b"Hello world!!!\0", 1, 0, MPI_COMM_WORLD);
+        obj.send(&vec![1, 2, 3, 4, 5], 1, 1, MPI_COMM_WORLD);
+        let mut data: Data<i32> = obj.recv(5, 1, 10, MPI_COMM_WORLD).unwrap();
+        assert_eq!(data.into_slice(), [5, 4, 3, 2, 1]);
+    } else {
+        let data: Data<u8> = obj.recv(15, 0, 0, MPI_COMM_WORLD).unwrap();
+        let str = unsafe { CStr::from_ptr(data.raw() as *const i8).to_str().unwrap() };
+        assert_eq!(str, "Hello world!!!");
+        let mut data: Data<i32> = obj.recv(5, 0, 1, MPI_COMM_WORLD).unwrap();
+        assert_eq!(data.into_slice(), [1, 2, 3, 4, 5]);
+        obj.send(&vec![5, 4, 3, 2, 1], 0, 10, MPI_COMM_WORLD);
+    }
+}
