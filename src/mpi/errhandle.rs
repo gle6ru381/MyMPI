@@ -172,7 +172,8 @@ fn p_mpi_errors_return(_: MPI_Comm, pcode: i32) {
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_call_errhandler(_: MPI_Comm, _: i32) -> i32 {
+pub extern "C" fn MPI_Comm_call_errhandler(comm: MPI_Comm, code: i32) -> i32 {
+    Context::err_handler().call(comm, code);
     MPI_SUCCESS
 }
 

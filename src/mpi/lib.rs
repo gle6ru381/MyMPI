@@ -14,6 +14,7 @@ mod reqqueue;
 mod shm;
 mod types;
 mod xfer;
+mod object;
 
 pub use base::*;
 pub use collectives::*;
@@ -23,3 +24,4 @@ pub use metatypes::*;
 pub use private::uninit;
 pub use types::*;
 pub use xfer::*;
+pub use object::MpiObject;

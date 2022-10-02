@@ -1,14 +1,15 @@
-use crate::reducefuc::*;
 use crate::{
     private::*, types::*, MPI_Comm_call_errhandler, MPI_Comm_rank, MPI_Comm_size, MPI_Recv,
     MPI_Send, MPI_Type_size, MPI_CHECK, MPI_CHECK_OP, MPI_CHECK_TYPE,
 };
-use std::{alloc::Layout, ffi::c_void};
+use crate::{reducefuc::*, MPI_Sendrecv};
+use std::{alloc::alloc, alloc::dealloc, alloc::Layout, ffi::c_void};
 
 const BARRIER_TAG: i32 = 0;
 const BCAST_TAG: i32 = 1;
 const REDUCE_TAG: i32 = 2;
 const GATHER_TAG: i32 = 3;
+const ALLREDUCE_TAG: i32 = 4;
 
 type FUNC = fn(*const c_void, *mut c_void, i32, i32);
 
@@ -466,8 +467,92 @@ pub extern "C" fn MPI_Allreduce(
     op: MPI_Op,
     comm: MPI_Comm,
 ) -> i32 {
-    CHECK_RET!(MPI_Reduce(sbuf, rbuf, cnt, dtype, op, 0, comm));
-    CHECK_RET!(MPI_Bcast(rbuf, cnt, dtype, 0, comm));
+    MPI_CHECK!(!sbuf.is_null() && !rbuf.is_null(), comm, MPI_ERR_BUFFER);
+    MPI_CHECK_TYPE!(dtype, comm);
+    MPI_CHECK_OP!(op, comm);
+
+    let mut n = 1;
+    while n <= Context::size() {
+        n <<= 1;
+    }
+    n >>= 1;
+    if n == Context::size() {
+        let mut stat = MPI_Status::uninit();
+
+        if cnt == 0 {
+            return MPI_SUCCESS;
+        }
+
+        if Context::size() == 1 {
+            if p_mpi_type_copy(rbuf, sbuf, cnt, dtype).is_null() {
+                MPI_Comm_call_errhandler(comm, MPI_ERR_INTERN);
+                return MPI_ERR_INTERN;
+            }
+            return MPI_SUCCESS;
+        }
+
+        let c = Context::comm();
+        c.inc_key(comm);
+
+        let mut code = MPI_Sendrecv(
+            sbuf,
+            cnt,
+            dtype,
+            Context::rank() ^ 1,
+            ALLREDUCE_TAG,
+            rbuf,
+            cnt,
+            dtype,
+            Context::rank() ^ 1,
+            ALLREDUCE_TAG,
+            comm,
+            &mut stat,
+        );
+        if code == MPI_SUCCESS {
+            FUNCTIONS[op as usize](sbuf, rbuf, cnt, dtype);
+            if Context::size() > 2 {
+                let mut i = 2;
+                let ext = p_mpi_type_size(dtype);
+                let tbuf: *mut c_void;
+
+                let layout = unsafe { Layout::from_size_align_unchecked((ext * cnt) as usize, 1) };
+                tbuf = unsafe { alloc(layout) } as *mut c_void;
+                if tbuf.is_null() {
+                    c.dec_key(comm);
+                    Context::call_error(comm, MPI_ERR_INTERN);
+                    return MPI_ERR_INTERN;
+                }
+
+                while i <= n {
+                    code = MPI_Sendrecv(
+                        rbuf,
+                        cnt,
+                        dtype,
+                        Context::rank() ^ i,
+                        ALLREDUCE_TAG,
+                        tbuf,
+                        cnt,
+                        dtype,
+                        Context::rank() ^ i,
+                        REDUCE_TAG,
+                        comm,
+                        &mut stat,
+                    );
+                    if code == MPI_SUCCESS {
+                        FUNCTIONS[op as usize](tbuf, rbuf, cnt, dtype);
+                    } else {
+                        break;
+                    }
+                    i <<= 1;
+                }
+                unsafe { dealloc(tbuf as *mut u8, layout) };
+            }
+        }
+        c.dec_key(comm);
+    } else {
+        CHECK_RET!(MPI_Reduce(sbuf, rbuf, cnt, dtype, op, 0, comm));
+        CHECK_RET!(MPI_Bcast(rbuf, cnt, dtype, 0, comm));
+    }
     MPI_SUCCESS
 }
 

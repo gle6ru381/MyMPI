@@ -1,15 +1,45 @@
 use crate::context::Context;
 use crate::{private::*, MPI_CHECK};
 use std::ffi::c_void;
+use std::ops::{Deref, DerefMut};
 use std::ptr::null_mut;
+use std::slice::{from_raw_parts, from_raw_parts_mut};
 
-struct Buffer {
-    pub buf: *mut c_void,
-    pub cnt: i32,
-    pub dtype: MPI_Datatype,
-    pub rank: i32,
-    pub tag: i32,
-    pub comm: MPI_Comm,
+pub struct Buffer {
+    buf: *mut c_void,
+    cnt: i32,
+    dtype: MPI_Datatype,
+    rank: i32,
+    tag: i32,
+    comm: MPI_Comm,
+}
+
+pub trait Typed {
+    fn into_mpi() -> i32;
+}
+
+impl Typed for i32 {
+    fn into_mpi() -> i32 {
+        MPI_INT
+    }
+}
+
+impl Typed for i8 {
+    fn into_mpi() -> i32 {
+        MPI_BYTE
+    }
+}
+
+impl Typed for u8 {
+    fn into_mpi() -> i32 {
+        MPI_BYTE
+    }
+}
+
+impl Typed for f64 {
+    fn into_mpi() -> i32 {
+        MPI_DOUBLE
+    }
 }
 
 impl P_MPI_Request {
@@ -21,7 +51,6 @@ impl P_MPI_Request {
         *pflag = 0;
         if !(*preq).is_null() {
             let req = unsafe { &mut **preq };
-            debug!("Test request: {}, {}", req.tag, req.rank);
             if req.flag != 0 {
                 debug!("Find request with tag: {}, rank: {}", req.tag, req.rank);
                 *pflag = 1;
@@ -92,6 +121,106 @@ impl Buffer {
             cnt: self.bytes(),
             rank: Context::comm().rank_map(self.comm, self.rank),
         }
+    }
+
+    pub const fn new() -> Self {
+        Buffer {
+            buf: null_mut(),
+            cnt: 0,
+            dtype: 0,
+            rank: 0,
+            tag: 0,
+            comm: 0,
+        }
+    }
+
+    #[must_use]
+    pub fn from<'a, T: Typed>(data: &'a [T]) -> Self {
+        Buffer { buf: data.as_ptr() as *mut c_void, cnt: data.len() as i32, dtype: T::into_mpi(), rank: 0, tag: 0, comm: 0 }
+    }
+
+    #[must_use]
+    pub fn from_mut<'a, T: Typed>(data: &'a mut [T]) -> Self {
+        Buffer {
+            buf: data.as_mut_ptr() as *mut c_void,
+            cnt: data.len() as i32,
+            dtype: T::into_mpi(),
+            rank: 0,
+            tag: 0,
+            comm: 0
+        }        
+    }
+
+    #[must_use]
+    pub fn set_data<'a, D: Typed, T: Deref<Target=[D]>>(self, data: &'a T) -> Self {
+        self.set_data_raw(data.deref())
+    }
+
+    #[must_use]
+    pub fn set_data_mut<'a, D: Typed, T: DerefMut<Target=[D]>>(self, data: &'a mut T) -> Self {
+        self.set_data_raw_mut(&mut data.deref_mut())
+    }
+
+    #[must_use]
+    pub fn set_data_raw<'a, T: Typed>(mut self, data: &'a [T]) -> Self {
+        self.buf = data.as_ptr() as *mut c_void;
+        self.dtype = T::into_mpi();
+        self.cnt = data.len() as i32;
+        self
+    }
+
+    #[must_use]
+    pub fn set_data_raw_mut<'a, T: Typed>(mut self, data: &'a mut [T]) -> Self {
+        self.buf = data.as_mut_ptr() as *mut c_void;
+        self.dtype = T::into_mpi();
+        self.cnt = data.len() as i32;
+        self
+    }
+
+    #[must_use]
+    pub fn set_rank(mut self, rank: i32) -> Self {
+        self.rank = rank;
+        self
+    }
+
+    #[must_use]
+    pub fn set_tag(mut self, tag: i32) -> Self {
+        self.tag = tag;
+        self
+    }
+
+    #[must_use]
+    pub fn set_comm(mut self, comm: MPI_Comm) -> Self {
+        self.comm = comm;
+        self
+    }
+
+    pub fn data<'a, T: Typed>(&'a self) -> &'a [T] {
+        debug_assert_eq!(T::into_mpi(), self.dtype);
+        debug!("Get data: {:X}", self.buf as usize);
+        unsafe { from_raw_parts(self.buf as *const T, self.cnt as usize) }
+    }
+
+    pub unsafe fn data_mut_unchecked<'a, T:Typed>(&'a mut self, size: usize) -> &'a mut [T] {
+        from_raw_parts_mut(self.buf as *mut T, size as usize)
+    }
+
+    pub fn data_mut<'a, T: Typed>(&'a mut self, size: usize) -> &'a mut [T] {
+        debug_assert_eq!(T::into_mpi(), self.dtype);
+        debug_assert!(size < self.bytes() as usize);
+        unsafe {self.data_mut_unchecked(size)}
+    }
+
+    pub fn rank(&self) -> i32 {
+        self.rank
+    }
+
+    pub fn tag(&self) -> i32 {
+        self.tag
+    }
+
+    pub fn comm(&self) -> MPI_Comm {
+        self.comm
     }
 
     pub fn bytes(&self) -> i32 {
