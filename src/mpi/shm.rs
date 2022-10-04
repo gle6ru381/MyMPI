@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
+use crate::memory::memcpy;
 use crate::private::*;
 use std::{
     mem::size_of,
@@ -23,8 +24,8 @@ struct Cell {
     pub len: i32,         // 4
     pub tag: i32,         // 8
     m_flag: i8,           // 9
-    pub pad: [i8; 3],     // 12
-    pub buff: [i8; 4084], // 4096
+    pub pad: [i8; 23],    // 32
+    pub buff: [i8; 4064], // 4096
 }
 
 impl Cell {
@@ -39,7 +40,6 @@ impl Cell {
 
     #[inline(always)]
     pub fn setFlag(&mut self, val: i8) {
-        println!("{} Set buffer flag: {val}", Context::rank());
         return unsafe { write_volatile(&mut self.m_flag, val) };
     }
 
@@ -60,24 +60,21 @@ impl Cell {
 
 #[repr(C)]
 struct MpiShm {
-    nsend: i8,
-    nrecv: i8,
+    nsend: i8,     // 1
+    nrecv: i8,     // 2
+    pad: [i8; 30], // 32
     cells: [Cell; 2],
 }
 
 impl MpiShm {
     #[inline(always)]
     pub fn swapSend(&mut self) {
-        print!("{} Swap send buffer: {} on ", Context::rank(), self.nsend);
         self.nsend = (self.nsend + 1) % self.cells.len() as i8;
-        println!("{}", self.nsend);
     }
 
     #[inline(always)]
     pub fn swapRecv(&mut self) {
-        print!("{} Swap recv buffer: {} on ", Context::rank(), self.nrecv);
         self.nrecv = (self.nrecv + 1) % self.cells.len() as i8;
-        println!("{}", self.nrecv);
     }
 
     #[inline(always)]
@@ -134,6 +131,7 @@ impl ShmData {
         self.recv_queue.push()
     }
 
+    #[allow(unused_variables)]
     #[inline(always)]
     pub fn find_unexp(&mut self, rank: i32, tag: i32) -> MPI_Request {
         if self.unexp_queue.len() != 0 {
@@ -248,12 +246,17 @@ impl ShmData {
         }
 
         if unexp {
-            let layout = std::alloc::Layout::from_size_align(req.cnt as usize, 1).unwrap();
+            let layout = std::alloc::Layout::from_size_align(req.cnt as usize, 32).unwrap();
             let buf = unsafe { std::alloc::alloc(layout) };
             if buf.is_null() {
                 debug!("Error allocate unexpected buffer");
                 return MPI_ERR_OTHER;
             }
+            debug_assert!(
+                buf as usize % 32 == 0,
+                "Unexpected buff alignment: {}",
+                buf as usize % 32
+            );
             req.buf = buf as *mut c_void;
         } else if req.cnt < pshm.recv_cell().len {
             debug!("Truncate error for recv");
@@ -264,14 +267,14 @@ impl ShmData {
 
         let mut length = req.cnt as usize;
         let mut buf = req.buf;
+        debug_assert!(buf as usize % 32 == 0 || length == 0, "Length: {length}");
         debug!("Recv length: {length}");
         while length > Cell::buf_len() {
-            unsafe {
-                buf.copy_from(
-                    pshm.recv_cell().buff.as_ptr() as *const c_void,
-                    Cell::buf_len(),
-                );
-            }
+            memcpy(
+                buf,
+                pshm.recv_cell().buff.as_ptr() as *const c_void,
+                Cell::buf_len(),
+            );
             pshm.recv_cell().setFlag(0);
             pshm.swapRecv();
             pshm.recv_cell().wait_ne(0);
@@ -280,9 +283,13 @@ impl ShmData {
             length -= Cell::buf_len();
         }
 
-        unsafe {
-            buf.copy_from(pshm.recv_cell().buff.as_ptr() as *const c_void, length);
-        }
+        debug_assert!(
+            buf as usize % 32 == 0 || length == 0,
+            "Buff alignment: {}",
+            buf as usize % 32
+        );
+        debug_assert!(pshm.recv_cell().buff.as_ptr() as *const c_void as usize % 32 == 0);
+        memcpy(buf, pshm.recv_cell().buff.as_ptr() as *const c_void, length);
         pshm.recv_cell().setFlag(0);
         pshm.swapRecv();
 
@@ -322,12 +329,11 @@ impl ShmData {
         debug!("Send length: {length}");
 
         while length > Cell::buf_len() {
-            unsafe {
-                buf.copy_to(
-                    pshm.send_cell().buff.as_mut_ptr() as *mut c_void,
-                    Cell::buf_len(),
-                );
-            }
+            memcpy(
+                pshm.send_cell().buff.as_mut_ptr() as *mut c_void,
+                buf,
+                Cell::buf_len(),
+            );
             pshm.send_cell().setFlag(1);
             pshm.swapSend();
             pshm.send_cell().wait_eq(0);
@@ -336,9 +342,18 @@ impl ShmData {
             length -= Cell::buf_len();
         }
 
-        unsafe {
-            buf.copy_to(pshm.send_cell().buff.as_mut_ptr() as *mut c_void, length);
-        }
+        debug_assert!(
+            pshm.send_cell().buff.as_mut_ptr() as usize % 32 == 0,
+            "Current: {}, Cell align: {}",
+            pshm.send_cell().buff.as_mut_ptr() as usize % 32,
+            pshm.send_cell() as *mut Cell as usize % 32
+        );
+
+        memcpy(
+            pshm.send_cell().buff.as_mut_ptr() as *mut c_void,
+            buf,
+            length,
+        );
         pshm.send_cell().setFlag(1);
         pshm.swapSend();
 

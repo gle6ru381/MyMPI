@@ -4,6 +4,24 @@ use std::ffi::c_void;
 #[cfg(target_feature = "avx2")]
 pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
+        if dest as usize % 32 != 0 || src as usize % 32 != 0 {
+            if dest as usize % 32 == src as usize % 32 {
+                while dest as usize % 32 != 0 {
+                    *(dest as *mut u8) = *(src as *const u8);
+                    dest = dest.add(1);
+                    src = src.add(1);
+                    size -= 1;
+                }
+            } else if dest as usize % 32 == 0 {
+                ymmntcpy_unaligned_src(dest, src, size);
+                return;
+            } else {
+                std::ptr::copy(src, dest, size);
+                return;
+            }
+        }
+        debug_assert!(dest as usize % 32 == 0);
+        debug_assert!(src as usize % 32 == 0);
         while size >= 256 {
             asm!(
                 "vmovntdqa {temp0}, [{src} + 0]",
@@ -54,8 +72,8 @@ pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) 
                 temp2 = out(ymm_reg) _,
                 temp3 = out(ymm_reg) _,
             );
-            dest = dest.add(256);
-            src = src.add(256);
+            dest = dest.add(128);
+            src = src.add(128);
             size -= 128;
         }
         if size >= 64 {
@@ -99,6 +117,122 @@ pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) 
         }
         while size != 0 {
             *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
+            size -= 1;
+        }
+    }
+}
+
+#[cfg(target_feature = "avx2")]
+pub fn ymmntcpy_unaligned_src(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
+    unsafe {
+        while dest as usize % 32 != 0 {
+            *(dest as *mut u8) = *(src as *mut u8);
+            dest = dest.add(1);
+            src = src.add(1);
+            size -= 1;
+        }
+        while size >= 256 {
+            asm!(
+                "prefetchnta [{src} + 256]",
+                "vmovdqu {temp0}, [{src} + 0]",
+                "vmovdqu {temp1}, [{src} + 32]",
+                "vmovdqu {temp2}, [{src} + 64]",
+                "vmovdqu {temp3}, [{src} + 96]",
+                "vmovdqu {temp4}, [{src} + 128]",
+                "vmovdqu {temp5}, [{src} + 160]",
+                "vmovdqu {temp6}, [{src} + 192]",
+                "vmovdqu {temp7}, [{src} + 224]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 32], {temp1}",
+                "vmovntdq [{dest} + 64], {temp2}",
+                "vmovntdq [{dest} + 96], {temp3}",
+                "vmovntdq [{dest} + 128], {temp4}",
+                "vmovntdq [{dest} + 160], {temp5}",
+                "vmovntdq [{dest} + 192], {temp6}",
+                "vmovntdq [{dest} + 224], {temp7}",
+                dest = inout(reg) dest,
+                src = inout(reg) src,
+                temp0 = out(ymm_reg) _,
+                temp1 = out(ymm_reg) _,
+                temp2 = out(ymm_reg) _,
+                temp3 = out(ymm_reg) _,
+                temp4 = out(ymm_reg) _,
+                temp5 = out(ymm_reg) _,
+                temp6 = out(ymm_reg) _,
+                temp7 = out(ymm_reg) _,
+            );
+            dest = dest.add(256);
+            src = src.add(256);
+            size -= 256;
+        }
+        if size >= 128 {
+            asm!(
+                "prefetchnta [{src} + 128]",
+                "vmovdqu {temp0}, [{src} + 0]",
+                "vmovdqu {temp1}, [{src} + 32]",
+                "vmovdqu {temp2}, [{src} + 64]",
+                "vmovdqu {temp3}, [{src} + 96]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 32], {temp1}",
+                "vmovntdq [{dest} + 64], {temp2}",
+                "vmovntdq [{dest} + 96], {temp3}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(ymm_reg) _,
+                temp1 = out(ymm_reg) _,
+                temp2 = out(ymm_reg) _,
+                temp3 = out(ymm_reg) _,
+            );
+            dest = dest.add(128);
+            src = src.add(128);
+            size -= 128;
+        }
+        if size >= 64 {
+            asm!(
+                "prefetchnta [{src} + 64]",
+                "vmovdqu {temp0}, [{src} + 0]",
+                "vmovdqu {temp0}, [{src} + 32",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 32], {temp1}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(ymm_reg) _,
+                temp1 = out(ymm_reg) _,
+            );
+            dest = dest.add(64);
+            src = src.add(64);
+            size -= 64;
+        }
+        if size >= 32 {
+            asm!(
+                "vmovdqu {temp0}, [{src} + 0]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(ymm_reg) _,
+            );
+            dest = dest.add(32);
+            src = src.add(32);
+            size -= 32;
+        }
+        if size >= 16 {
+            asm!(
+                "vmovdqu {temp0}, [{src} + 0]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(xmm_reg) _,
+            );
+            dest = dest.add(16);
+            src = src.add(16);
+            size -= 16;
+        }
+        while size != 0 {
+            *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
             size -= 1;
         }
     }
@@ -251,6 +385,8 @@ pub fn ymmntcpy_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size
         }
         while size != 0 {
             *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
             size -= 1;
         }
     }
@@ -300,6 +436,8 @@ pub fn ymmntcpy_short(mut dest: *mut c_void, mut src: *const c_void, mut size: u
         }
         while size != 0 {
             *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
             size -= 1;
         }
     }
@@ -350,6 +488,8 @@ pub fn ymmntcpy_short_prefetch(mut dest: *mut c_void, mut src: *const c_void, mu
         }
         while size != 0 {
             *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
             size -= 1;
         }
     }
@@ -441,6 +581,8 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
         }
         while n != 0 {
             *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
             n -= 1;
         }
     }
@@ -613,6 +755,8 @@ pub fn avx512ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
         }
         while size != 0 {
             *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
             size -= 1;
         }
     }
@@ -660,7 +804,36 @@ pub fn avx512ntcpy_short(mut dest: *mut c_void, mut src: *mut c_void, size: usiz
         }
         while size != 0 {
             *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
             size -= 1;
         }
     }
+}
+
+pub fn memcpy(dest: *mut c_void, src: *const c_void, size: usize) {
+    if cfg!(feature = "ntcpy") {
+        if size == 0 {
+            return;
+        }
+        ymmntcpy(dest, src, size);
+        //MPI_ntcpy(dest, src, size);
+    } else {
+        unsafe { std::ptr::copy(src, dest, size) };
+    }
+}
+
+#[cfg(target_feature = "avx512")]
+pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
+    avx512ntcpy(dest, src, size);
+}
+
+#[cfg(all(target_feature = "avx2", not(target_feature = "avx512")))]
+pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
+    ymmntcpy(dest, src, size);
+}
+
+#[cfg(all(not(target_feature = "avx2"), not(target_feature = "avx512")))]
+pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
+    std::ptr::copy(src, dest, size)
 }

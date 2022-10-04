@@ -66,19 +66,14 @@ impl Context {
             let mut argv = *pargv;
 
             while --argc != 0 {
-                println!("Arg step");
                 argv = argv.add(1);
-                println!("Arg: {:x}", *argv as usize);
                 let mut val = *argv;
                 while *val != '\0' as i8 {
-                    println!("Val: {}", *val as u8 as char);
                     val = val.add(1);
                 }
                 let tmp = CStr::from_ptr(*argv);
-                println!("Tmp: {}", tmp.as_ptr() as usize);
                 let mut arg = tmp.to_str().unwrap();
                 if arg == "-n" || arg == "-np" {
-                    println!("Step in np");
                     if argc > 1 {
                         argv = argv.add(1);
                         arg = CStr::from_ptr(*argv).to_str().unwrap();
@@ -93,12 +88,9 @@ impl Context {
                                     while !argv.is_null() {
                                         argv = argv.add(1);
                                         *pargc -= 1;
-                                        println!("Decrement argc: {}", *pargc);
                                         *((*pargv).add((*pargc - argc) as usize)) = *argv;
                                         *argv = std::ptr::null_mut();
                                     }
-
-                                    println!("{}/{}: n = {n}", CONTEXT.mpi_rank, CONTEXT.mpi_size);
                                 } else {
                                     n = CONTEXT.mpi_size;
                                 }
@@ -108,10 +100,8 @@ impl Context {
                     }
                 }
             }
-            println!("Set mpi size on: {n}");
             CONTEXT.mpi_size = n;
         }
-        println!("Exit parse args");
         MPI_SUCCESS
     }
 
@@ -129,13 +119,6 @@ impl Context {
                     _ => return Self::split_proc(rank, size / 2 + size % 2),
                 }
             }
-        }
-
-        unsafe {
-            println!(
-                "{}/{}: mpi rank = {}",
-                CONTEXT.mpi_rank, CONTEXT.mpi_size, CONTEXT.mpi_rank
-            );
         }
 
         MPI_SUCCESS

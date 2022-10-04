@@ -15,12 +15,12 @@ pub struct Buffer {
 }
 
 pub trait Typed {
-    const ALIGN: usize = 1;
+    const ALIGN: usize = 32;
     fn into_mpi() -> i32;
 }
 
 impl Typed for i32 {
-    const ALIGN: usize = 4;
+    const ALIGN: usize = 32;
     fn into_mpi() -> i32 {
         MPI_INT
     }
@@ -33,14 +33,14 @@ impl Typed for i8 {
 }
 
 impl Typed for u8 {
-    const ALIGN: usize = 1;
+    const ALIGN: usize = 32;
     fn into_mpi() -> i32 {
         MPI_BYTE
     }
 }
 
 impl Typed for f64 {
-    const ALIGN: usize = 8;
+    const ALIGN: usize = 32;
     fn into_mpi() -> i32 {
         MPI_DOUBLE
     }
@@ -260,6 +260,7 @@ impl Buffer {
         self.cnt * p_mpi_type_size(self.dtype)
     }
 
+    #[allow(unused_variables)]
     pub fn send(&self, req: &mut MPI_Request) -> i32 {
         let dest = Context::comm().rank_map(self.comm, self.rank);
 
@@ -354,13 +355,10 @@ pub extern "C" fn MPI_Send(
     if code != MPI_SUCCESS {
         return code;
     }
-    println!("Send isend finish");
     code = MPI_Wait(&mut req, null_mut());
     if code != MPI_SUCCESS {
         return code;
     }
-
-    println!("Send finish");
 
     MPI_SUCCESS
 }
@@ -380,13 +378,10 @@ pub extern "C" fn MPI_Recv(
     if code != MPI_SUCCESS {
         return code;
     }
-    println!("Recv irecv finish");
     code = MPI_Wait(&mut req, pstat);
     if code != MPI_SUCCESS {
         return code;
     }
-
-    println!("Recv finish");
 
     MPI_SUCCESS
 }

@@ -18,7 +18,7 @@ fn test_p2p() {
     MPI_Comm_size(MPI_COMM_WORLD, &mut size);
     MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
 
-    let layout = Layout::from_size_align(100, 1).unwrap();
+    let layout = Layout::from_size_align(100, 32).unwrap();
 
     if rank == 0 {
         let buff = b"Hello world!!!\0";
@@ -47,6 +47,7 @@ fn test_p2p() {
     } else {
         unsafe {
             let buff = alloc(layout);
+            debug_assert!(buff as usize % 32 == 0);
             let mut stat = MPI_Status::uninit();
             MPI_Recv(
                 buff as *mut c_void,
@@ -77,12 +78,12 @@ fn test_p2p_unexpect() {
     MPI_Comm_size(MPI_COMM_WORLD, &mut size);
     MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
 
-    let layout = Layout::from_size_align(100, 1).unwrap();
+    let layout = Layout::from_size_align(100, 32).unwrap();
     if rank == 0 {
         let buff = b"Hello world!!!\0";
         let unexpect = b"Unexpect message\0";
         let rbuf = unsafe { alloc(layout) };
-
+        debug_assert!(rbuf as usize % 32 == 0);
         let mut reqs: [MPI_Request; 2] = uninit();
         let mut stats: [MPI_Status; 2] = uninit();
         MPI_Isend(
@@ -119,6 +120,7 @@ fn test_p2p_unexpect() {
     } else {
         unsafe {
             let buff = alloc(layout);
+            debug_assert!(buff as usize % 32 == 0);
             let mut stat = MPI_Status::uninit();
             MPI_Recv(
                 buff as *mut c_void,

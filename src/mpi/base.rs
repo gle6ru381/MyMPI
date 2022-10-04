@@ -15,7 +15,7 @@ pub extern "C" fn MPI_Init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
     //MPI_CHECK!(!pargc.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
     //MPI_CHECK!(!pargv.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
 
-    println!("{}/{}: -> success", Context::rank(), Context::size());
+    debug!("-> success");
 
     return Context::init(pargc, pargv);
 }
