@@ -121,6 +121,7 @@ pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) 
             src = src.add(1);
             size -= 1;
         }
+        asm!("sfence");
     }
 }
 
@@ -135,7 +136,6 @@ pub fn ymmntcpy_unaligned_src(mut dest: *mut c_void, mut src: *const c_void, mut
         }
         while size >= 256 {
             asm!(
-                "prefetchnta [{src} + 256]",
                 "vmovdqu {temp0}, [{src} + 0]",
                 "vmovdqu {temp1}, [{src} + 32]",
                 "vmovdqu {temp2}, [{src} + 64]",
@@ -169,7 +169,6 @@ pub fn ymmntcpy_unaligned_src(mut dest: *mut c_void, mut src: *const c_void, mut
         }
         if size >= 128 {
             asm!(
-                "prefetchnta [{src} + 128]",
                 "vmovdqu {temp0}, [{src} + 0]",
                 "vmovdqu {temp1}, [{src} + 32]",
                 "vmovdqu {temp2}, [{src} + 64]",
@@ -235,6 +234,7 @@ pub fn ymmntcpy_unaligned_src(mut dest: *mut c_void, mut src: *const c_void, mut
             src = src.add(1);
             size -= 1;
         }
+        asm!("sfence");
     }
 }
 

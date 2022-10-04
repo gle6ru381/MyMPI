@@ -1,4 +1,4 @@
 deps/criterion
 /target
-Cpp/build
-Cpp/*.user
+C/build
+C/*.user

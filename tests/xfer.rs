@@ -3,7 +3,7 @@ use std::{
     alloc::{alloc, dealloc, Layout},
     env::set_var,
     ffi::CStr,
-    ptr::null_mut,
+    ptr::null_mut, slice::from_raw_parts_mut,
 };
 
 #[test]
@@ -216,4 +216,48 @@ fn test_obj_async() {
             .unwrap();
         obj.wait_all(&mut [req.request(), req2.request()]);
     }
+}
+
+#[test]
+fn test_big_data() {
+    set_var("MPI_SIZE", "2");
+
+    MPI_Init(null_mut(), null_mut());
+    let mut rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
+
+    let msg_sizes = [4096, 102400, 204800, 409600, 921600, 3145728];
+
+    if rank == 0 {
+        for size in msg_sizes.into_iter() {
+            let layout =  Layout::from_size_align(size as usize, 32).unwrap();
+            let vec = unsafe {from_raw_parts_mut(alloc(layout), size as usize)};
+
+            for i in 0..size {
+                vec[i as usize] = (i as u8 * size as u8) as u8;
+            }
+            MPI_Send(vec.as_ptr() as *const c_void, size, MPI_BYTE, 1, 0, MPI_COMM_WORLD);
+            unsafe {
+                dealloc(vec.as_mut_ptr(), layout);
+            }
+        }
+    } else {
+        for size in msg_sizes.into_iter() {
+            let layout =  Layout::from_size_align(size as usize, 32).unwrap();
+            let vec = unsafe {from_raw_parts_mut(alloc(layout), size as usize)};
+            for i in 0..size {
+                vec[i as usize] = 0;
+            }
+            let mut stat = MPI_Status::uninit();
+            MPI_Recv(vec.as_mut_ptr() as *mut c_void, size, MPI_BYTE, 0, 0, MPI_COMM_WORLD, &mut stat);
+            for i in 0..size {
+                assert_eq!(vec[i as usize], (i as u8 * size as u8) as u8);
+            }
+            unsafe {
+                dealloc(vec.as_mut_ptr(), layout);
+            }
+        }
+    }
+   // MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Finalize();
 }
