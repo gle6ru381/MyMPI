@@ -128,6 +128,10 @@ impl Context {
         unsafe {
             debug_assert!(!CONTEXT.mpi_init);
 
+            if cfg!(feature = "ntcpy") {
+                println!("Using non temporal copy");
+            }
+
             Self::get_env();
 
             let mut code = CONTEXT.shm.init(pargc, pargv);
