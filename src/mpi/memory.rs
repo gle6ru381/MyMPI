@@ -1,8 +1,9 @@
+#![feature(asm)]
 use std::arch::asm;
 use std::ffi::c_void;
 
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
+#[cfg(target_feature = "sse2")]
+pub fn sse2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
         if dest as usize % 32 != 0 || src as usize % 32 != 0 {
             if dest as usize % 32 == src as usize % 32 {
@@ -12,502 +13,23 @@ pub fn ymmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) 
                     src = src.add(1);
                     size -= 1;
                 }
-            } else if dest as usize % 32 == 0 {
-                ymmntcpy_unaligned_src(dest, src, size);
-                return;
             } else {
                 std::ptr::copy(src, dest, size);
                 return;
             }
         }
-        debug_assert!(dest as usize % 32 == 0);
-        debug_assert!(src as usize % 32 == 0);
-        while size >= 256 {
+        while size >= 128 {
             asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdqa {temp2}, [{src} + 64]",
-                "vmovntdqa {temp3}, [{src} + 96]",
-                "vmovntdqa {temp4}, [{src} + 128]",
-                "vmovntdqa {temp5}, [{src} + 160]",
-                "vmovntdqa {temp6}, [{src} + 192]",
-                "vmovntdqa {temp7}, [{src} + 224]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "vmovntdq [{dest} + 64], {temp2}",
-                "vmovntdq [{dest} + 96], {temp3}",
-                "vmovntdq [{dest} + 128], {temp4}",
-                "vmovntdq [{dest} + 160], {temp5}",
-                "vmovntdq [{dest} + 192], {temp6}",
-                "vmovntdq [{dest} + 224], {temp7}",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                temp2 = out(ymm_reg) _,
-                temp3 = out(ymm_reg) _,
-                temp4 = out(ymm_reg) _,
-                temp5 = out(ymm_reg) _,
-                temp6 = out(ymm_reg) _,
-                temp7 = out(ymm_reg) _,
-            );
-            dest = dest.add(256);
-            src = src.add(256);
-            size -= 256;
-        }
-        if size >= 128 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdqa {temp2}, [{src} + 64]",
-                "vmovntdqa {temp3}, [{src} + 96]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "vmovntdq [{dest} + 64], {temp2}",
-                "vmovntdq [{dest} + 96], {temp3}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                temp2 = out(ymm_reg) _,
-                temp3 = out(ymm_reg) _,
-            );
-            dest = dest.add(128);
-            src = src.add(128);
-            size -= 128;
-        }
-        if size >= 64 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-            );
-            dest = dest.add(64);
-            src = src.add(64);
-            size -= 64;
-        }
-        if size >= 32 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-            );
-            dest = dest.add(32);
-            src = src.add(32);
-            size -= 32;
-        }
-        if size >= 16 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(xmm_reg) _,
-            );
-            dest = dest.add(16);
-            src = src.add(16);
-            size -= 16;
-        }
-        while size != 0 {
-            *(dest as *mut u8) = *(src as *const u8);
-            dest = dest.add(1);
-            src = src.add(1);
-            size -= 1;
-        }
-        asm!("sfence");
-    }
-}
-
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy_unaligned_src(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
-    unsafe {
-        while dest as usize % 32 != 0 {
-            *(dest as *mut u8) = *(src as *mut u8);
-            dest = dest.add(1);
-            src = src.add(1);
-            size -= 1;
-        }
-        while size >= 256 {
-            asm!(
-                "vmovdqu {temp0}, [{src} + 0]",
-                "vmovdqu {temp1}, [{src} + 32]",
-                "vmovdqu {temp2}, [{src} + 64]",
-                "vmovdqu {temp3}, [{src} + 96]",
-                "vmovdqu {temp4}, [{src} + 128]",
-                "vmovdqu {temp5}, [{src} + 160]",
-                "vmovdqu {temp6}, [{src} + 192]",
-                "vmovdqu {temp7}, [{src} + 224]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "vmovntdq [{dest} + 64], {temp2}",
-                "vmovntdq [{dest} + 96], {temp3}",
-                "vmovntdq [{dest} + 128], {temp4}",
-                "vmovntdq [{dest} + 160], {temp5}",
-                "vmovntdq [{dest} + 192], {temp6}",
-                "vmovntdq [{dest} + 224], {temp7}",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                temp2 = out(ymm_reg) _,
-                temp3 = out(ymm_reg) _,
-                temp4 = out(ymm_reg) _,
-                temp5 = out(ymm_reg) _,
-                temp6 = out(ymm_reg) _,
-                temp7 = out(ymm_reg) _,
-            );
-            dest = dest.add(256);
-            src = src.add(256);
-            size -= 256;
-        }
-        if size >= 128 {
-            asm!(
-                "vmovdqu {temp0}, [{src} + 0]",
-                "vmovdqu {temp1}, [{src} + 32]",
-                "vmovdqu {temp2}, [{src} + 64]",
-                "vmovdqu {temp3}, [{src} + 96]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "vmovntdq [{dest} + 64], {temp2}",
-                "vmovntdq [{dest} + 96], {temp3}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                temp2 = out(ymm_reg) _,
-                temp3 = out(ymm_reg) _,
-            );
-            dest = dest.add(128);
-            src = src.add(128);
-            size -= 128;
-        }
-        if size >= 64 {
-            asm!(
+                "prefetchnta [{src} + 0]",
                 "prefetchnta [{src} + 64]",
-                "vmovdqu {temp0}, [{src} + 0]",
-                "vmovdqu {temp0}, [{src} + 32",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-            );
-            dest = dest.add(64);
-            src = src.add(64);
-            size -= 64;
-        }
-        if size >= 32 {
-            asm!(
-                "vmovdqu {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-            );
-            dest = dest.add(32);
-            src = src.add(32);
-            size -= 32;
-        }
-        if size >= 16 {
-            asm!(
-                "vmovdqu {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(xmm_reg) _,
-            );
-            dest = dest.add(16);
-            src = src.add(16);
-            size -= 16;
-        }
-        while size != 0 {
-            *(dest as *mut u8) = *(src as *const u8);
-            dest = dest.add(1);
-            src = src.add(1);
-            size -= 1;
-        }
-        asm!("sfence");
-    }
-}
-
-#[allow(unused_assignments)]
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy_aligned(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
-    unsafe {
-        if size % 256 == 0 {
-            asm!(
-                "2:",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdqa {temp2}, [{src} + 64]",
-                "vmovntdqa {temp3}, [{src} + 96]",
-                "vmovntdqa {temp4}, [{src} + 128]",
-                "vmovntdqa {temp5}, [{src} + 160]",
-                "vmovntdqa {temp6}, [{src} + 192]",
-                "vmovntdqa {temp7}, [{src} + 224]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "vmovntdq [{dest} + 64], {temp2}",
-                "vmovntdq [{dest} + 96], {temp3}",
-                "vmovntdq [{dest} + 128], {temp4}",
-                "vmovntdq [{dest} + 160], {temp5}",
-                "vmovntdq [{dest} + 192], {temp6}",
-                "vmovntdq [{dest} + 224], {temp7}",
-                "add {dest}, 256",
-                "add {src}, 256",
-                "sub {size}, 256",
-                "jg 2b",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                size = inout(reg) size,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                temp2 = out(ymm_reg) _,
-                temp3 = out(ymm_reg) _,
-                temp4 = out(ymm_reg) _,
-                temp5 = out(ymm_reg) _,
-                temp6 = out(ymm_reg) _,
-                temp7 = out(ymm_reg) _,
-            )
-        } else {
-            unreachable!();
-        }
-    }
-}
-
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
-    unsafe {
-        while size >= 256 {
-            asm!(
-                            "prefetchnta [{src} + 256]",
-            //                "prefetchnta [{src} + 320]",
-            //                "prefetchnta [{src} + 384]",
-            //                "prefetchnta [{src} + 448]",
-                            "vmovntdqa {temp0}, [{src} + 0]",
-                            "vmovntdqa {temp1}, [{src} + 32]",
-                            "vmovntdqa {temp2}, [{src} + 64]",
-                            "vmovntdqa {temp3}, [{src} + 96]",
-                            "vmovntdqa {temp4}, [{src} + 128]",
-                            "vmovntdqa {temp5}, [{src} + 160]",
-                            "vmovntdqa {temp6}, [{src} + 192]",
-                            "vmovntdqa {temp7}, [{src} + 224]",
-                            "vmovntdq [{dest} + 0], {temp0}",
-                            "vmovntdq [{dest} + 32], {temp1}",
-                            "vmovntdq [{dest} + 64], {temp2}",
-                            "vmovntdq [{dest} + 96], {temp3}",
-                            "vmovntdq [{dest} + 128], {temp4}",
-                            "vmovntdq [{dest} + 160], {temp5}",
-                            "vmovntdq [{dest} + 192], {temp6}",
-                            "vmovntdq [{dest} + 224], {temp7}",
-                            dest = inout(reg) dest,
-                            src = inout(reg) src,
-                            temp0 = out(ymm_reg) _,
-                            temp1 = out(ymm_reg) _,
-                            temp2 = out(ymm_reg) _,
-                            temp3 = out(ymm_reg) _,
-                            temp4 = out(ymm_reg) _,
-                            temp5 = out(ymm_reg) _,
-                            temp6 = out(ymm_reg) _,
-                            temp7 = out(ymm_reg) _,
-                        );
-            dest = dest.add(256);
-            src = src.add(256);
-            size -= 256;
-        }
-        if size >= 128 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdqa {temp2}, [{src} + 64]",
-                "vmovntdqa {temp3}, [{src} + 96]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "vmovntdq [{dest} + 64], {temp2}",
-                "vmovntdq [{dest} + 96], {temp3}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                temp2 = out(ymm_reg) _,
-                temp3 = out(ymm_reg) _,
-            );
-            dest = dest.add(256);
-            src = src.add(256);
-            size -= 128;
-        }
-        if size >= 64 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-            );
-            dest = dest.add(64);
-            src = src.add(64);
-            size -= 64;
-        }
-        if size >= 32 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-            );
-            dest = dest.add(32);
-            src = src.add(32);
-            size -= 32;
-        }
-        if size >= 16 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(xmm_reg) _,
-            );
-            dest = dest.add(16);
-            src = src.add(16);
-            size -= 16;
-        }
-        while size != 0 {
-            *(dest as *mut u8) = *(src as *const u8);
-            dest = dest.add(1);
-            src = src.add(1);
-            size -= 1;
-        }
-    }
-}
-
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy_short(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
-    unsafe {
-        while size >= 64 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-            );
-            dest = dest.add(64);
-            src = src.add(64);
-            size -= 64;
-        }
-        if size >= 32 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-            );
-            dest = dest.add(32);
-            src = src.add(32);
-            size -= 32;
-        }
-        if size >= 16 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(xmm_reg) _,
-            );
-            dest = dest.add(16);
-            src = src.add(16);
-            size -= 16;
-        }
-        while size != 0 {
-            *(dest as *mut u8) = *(src as *const u8);
-            dest = dest.add(1);
-            src = src.add(1);
-            size -= 1;
-        }
-    }
-}
-
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy_short_prefetch(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
-    unsafe {
-        while size >= 64 {
-            asm!(
-                "prefetchnta [{src} + 64]",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-            );
-            dest = dest.add(64);
-            src = src.add(64);
-            size -= 64;
-        }
-        if size >= 32 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(ymm_reg) _,
-            );
-            dest = dest.add(32);
-            src = src.add(32);
-            size -= 32;
-        }
-        if size >= 16 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = in(reg) dest,
-                src = in(reg) src,
-                temp0 = out(xmm_reg) _,
-            );
-            dest = dest.add(16);
-            src = src.add(16);
-            size -= 16;
-        }
-        while size != 0 {
-            *(dest as *mut u8) = *(src as *const u8);
-            dest = dest.add(1);
-            src = src.add(1);
-            size -= 1;
-        }
-    }
-}
-
-#[cfg(target_feature = "avx")]
-pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
-    unsafe {
-        while n >= 128 {
-            asm!(
-                "movntdqa {temp0}, [{src} + 0]",
-                "movntdqa {temp1}, [{src} + 16]",
-                "movntdqa {temp2}, [{src} + 32]",
-                "movntdqa {temp3}, [{src} + 48]",
-                "movntdqa {temp4}, [{src} + 64]",
-                "movntdqa {temp5}, [{src} + 80]",
-                "movntdqa {temp6}, [{src} + 96]",
-                "movntdqa {temp7}, [{src} + 112]",
+                "movdqa {temp0}, [{src} + 0]",
+                "movdqa {temp1}, [{src} + 16]",
+                "movdqa {temp2}, [{src} + 32]",
+                "movdqa {temp3}, [{src} + 48]",
+                "movdqa {temp4}, [{src} + 64]",
+                "movdqa {temp5}, [{src} + 80]",
+                "movdqa {temp6}, [{src} + 96]",
+                "movdqa {temp7}, [{src} + 112]",
                 "movntdq [{dest} + 0], {temp0}",
                 "movntdq [{dest} + 16], {temp1}",
                 "movntdq [{dest} + 32], {temp2}",
@@ -529,14 +51,241 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
             );
             dest = dest.add(128);
             src = src.add(128);
+            size -= 128;
+        }
+        if size >= 64 {
+            asm!(
+                "prefetchnta [{src} + 0]",
+                "movdqa {temp0}, [{src} + 0]",
+                "movdqa {temp1}, [{src} + 16]",
+                "movdqa {temp2}, [{src} + 32]",
+                "movdqa {temp3}, [{src} + 48]",
+                "movntdq [{dest} + 0], {temp0}",
+                "movntdq [{dest} + 16], {temp1}",
+                "movntdq [{dest} + 32], {temp2}",
+                "movntdq [{dest} + 48], {temp3}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(xmm_reg) _,
+                temp1 = out(xmm_reg) _,
+                temp2 = out(xmm_reg) _,
+                temp3 = out(xmm_reg) _,
+            );
+            dest = dest.add(64);
+            src = src.add(64);
+            size -= 64;
+        }
+        if size >= 32 {
+            asm!(
+                "prefetchnta [{src} + 0]",
+                "movdqa {temp0}, [{src} + 0]",
+                "movdqa {temp1}, [{src} + 16]",
+                "movntdq [{dest} + 0], {temp0}",
+                "movntdq [{dest} + 16], {temp1}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(xmm_reg) _,
+                temp1 = out(xmm_reg) _,
+            );
+            dest = dest.add(32);
+            src = src.add(32);
+            size -= 32;
+        }
+        if size >= 16 {
+            asm!(
+                "movdqa {temp0}, [{src} + 0]",
+                "movntdq [{dest} + 0], {temp0}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(xmm_reg) _,
+            );
+            dest = dest.add(16);
+            src = src.add(16);
+            size -= 16;
+        }
+        while size != 0 {
+            *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
+            size -= 1;
+        }
+    }
+}
+
+#[cfg(target_feature = "avx2")]
+pub fn avx2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
+    unsafe {
+        if dest as usize % 32 != 0 || src as usize % 32 != 0 {
+            if dest as usize % 32 == src as usize % 32 {
+                while dest as usize % 32 != 0 {
+                    *(dest as *mut u8) = *(src as *const u8);
+                    dest = dest.add(1);
+                    src = src.add(1);
+                    size -= 1;
+                }
+            } else {
+                std::ptr::copy(src, dest, size);
+                return;
+            }
+        }
+        debug_assert!(dest as usize % 32 == 0);
+        debug_assert!(src as usize % 32 == 0);
+        while size >= 256 {
+            asm!(
+                "prefetchnta [{src} + 0]",
+                "prefetchnta [{src} + 64]",
+                "prefetchnta [{src} + 128]",
+                "prefetchnta [{src} + 192]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp1}, [{src} + 32]",
+                "vmovdqa {temp2}, [{src} + 64]",
+                "vmovdqa {temp3}, [{src} + 96]",
+                "vmovdqa {temp4}, [{src} + 128]",
+                "vmovdqa {temp5}, [{src} + 160]",
+                "vmovdqa {temp6}, [{src} + 192]",
+                "vmovdqa {temp7}, [{src} + 224]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 32], {temp1}",
+                "vmovntdq [{dest} + 64], {temp2}",
+                "vmovntdq [{dest} + 96], {temp3}",
+                "vmovntdq [{dest} + 128], {temp4}",
+                "vmovntdq [{dest} + 160], {temp5}",
+                "vmovntdq [{dest} + 192], {temp6}",
+                "vmovntdq [{dest} + 224], {temp7}",
+                dest = inout(reg) dest,
+                src = inout(reg) src,
+                temp0 = out(ymm_reg) _,
+                temp1 = out(ymm_reg) _,
+                temp2 = out(ymm_reg) _,
+                temp3 = out(ymm_reg) _,
+                temp4 = out(ymm_reg) _,
+                temp5 = out(ymm_reg) _,
+                temp6 = out(ymm_reg) _,
+                temp7 = out(ymm_reg) _,
+            );
+            dest = dest.add(256);
+            src = src.add(256);
+            size -= 256;
+        }
+        if size >= 128 {
+            asm!(
+                "prefetchnta [{src} + 0]",
+                "prefetchnta [{src} + 64]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp1}, [{src} + 32]",
+                "vmovdqa {temp2}, [{src} + 64]",
+                "vmovdqa {temp3}, [{src} + 96]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 32], {temp1}",
+                "vmovntdq [{dest} + 64], {temp2}",
+                "vmovntdq [{dest} + 96], {temp3}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(ymm_reg) _,
+                temp1 = out(ymm_reg) _,
+                temp2 = out(ymm_reg) _,
+                temp3 = out(ymm_reg) _,
+            );
+            dest = dest.add(128);
+            src = src.add(128);
+            size -= 128;
+        }
+        if size >= 64 {
+            asm!(
+                "prefetchnta [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp1}, [{src} + 32]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 32], {temp1}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(ymm_reg) _,
+                temp1 = out(ymm_reg) _,
+            );
+            dest = dest.add(64);
+            src = src.add(64);
+            size -= 64;
+        }
+        if size >= 32 {
+            asm!(
+                "prefetchnta [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(ymm_reg) _,
+            );
+            dest = dest.add(32);
+            src = src.add(32);
+            size -= 32;
+        }
+        if size >= 16 {
+            asm!(
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(xmm_reg) _,
+            );
+            dest = dest.add(16);
+            src = src.add(16);
+            size -= 16;
+        }
+        while size != 0 {
+            *(dest as *mut u8) = *(src as *const u8);
+            dest = dest.add(1);
+            src = src.add(1);
+            size -= 1;
+        }
+        asm!("sfence");
+    }
+}
+
+#[cfg(target_feature = "avx")]
+pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
+    unsafe {
+        while n >= 128 {
+            asm!(
+                "prefetchnta [{src} + 0]",
+                "prefetchnta [{src} + 64]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp1}, [{src} + 16]",
+                "vmovdqa {temp2}, [{src} + 32]",
+                "vmovdqa {temp3}, [{src} + 48]",
+                "vmovdqa {temp4}, [{src} + 64]",
+                "vmovdqa {temp5}, [{src} + 80]",
+                "vmovdqa {temp6}, [{src} + 96]",
+                "vmovdqa {temp7}, [{src} + 112]",
+                "vmovntdq [{dest} + 0], {temp0}",
+                "vmovntdq [{dest} + 16], {temp1}",
+                "vmovntdq [{dest} + 32], {temp2}",
+                "vmovntdq [{dest} + 48], {temp3}",
+                "vmovntdq [{dest} + 64], {temp4}",
+                "vmovntdq [{dest} + 80], {temp5}",
+                "vmovntdq [{dest} + 96], {temp6}",
+                "vmovntdq [{dest} + 112], {temp7}",
+                dest = in(reg) dest,
+                src = in(reg) src,
+                temp0 = out(xmm_reg) _,
+                temp1 = out(xmm_reg) _,
+                temp2 = out(xmm_reg) _,
+                temp3 = out(xmm_reg) _,
+                temp4 = out(xmm_reg) _,
+                temp5 = out(xmm_reg) _,
+                temp6 = out(xmm_reg) _,
+                temp7 = out(xmm_reg) _,
+            );
+            dest = dest.add(128);
+            src = src.add(128);
             n -= 128;
         }
         if n >= 64 {
             asm!(
-                "movntdqa {temp0}, [{src} + 0]",
-                "movntdqa {temp1}, [{src} + 16]",
-                "movntdqa {temp2}, [{src} + 32]",
-                "movntdqa {temp3}, [{src} + 48]",
+                "prefetchnta [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp1}, [{src} + 16]",
+                "vmovdqa {temp2}, [{src} + 32]",
+                "vmovdqa {temp3}, [{src} + 48]",
                 "movntdq [{dest} + 0], {temp0}",
                 "movntdq [{dest} + 16], {temp1}",
                 "movntdq [{dest} + 32], {temp2}",
@@ -554,8 +303,9 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
         }
         if n >= 32 {
             asm!(
-                "movntdqa {temp0}, [{src} + 0]",
-                "movntdqa {temp1}, [{src} + 16]",
+                "prefetchnta [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp1}, [{src} + 16]",
                 "movntdq [{dest} + 0], {temp0}",
                 "movntdq [{dest} + 16], {temp1}",
                 dest = in(reg) dest,
@@ -569,7 +319,7 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
         }
         if n >= 16 {
             asm!(
-                "movntdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
                 "movntdq [{dest} + 0], {temp0}",
                 dest = in(reg) dest,
                 src = in(reg) src,
@@ -588,124 +338,15 @@ pub fn xmmntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
     }
 }
 
-#[allow(unused_assignments)]
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy_prefetch_aligned(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
-    unsafe {
-        if size % 256 == 0 {
-            asm!(
-                "2:",
-                "prefetchnta [{src} + 256]",
-                "prefetchnta [{src} + 320]",
-                "prefetchnta [{src} + 384]",
-                "prefetchnta [{src} + 448]",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdqa {temp2}, [{src} + 64]",
-                "vmovntdqa {temp3}, [{src} + 96]",
-                "vmovntdqa {temp4}, [{src} + 128]",
-                "vmovntdqa {temp5}, [{src} + 160]",
-                "vmovntdqa {temp6}, [{src} + 192]",
-                "vmovntdqa {temp7}, [{src} + 224]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "vmovntdq [{dest} + 64], {temp2}",
-                "vmovntdq [{dest} + 96], {temp3}",
-                "vmovntdq [{dest} + 128], {temp4}",
-                "vmovntdq [{dest} + 160], {temp5}",
-                "vmovntdq [{dest} + 192], {temp6}",
-                "vmovntdq [{dest} + 224], {temp7}",
-                "add {dest}, 256",
-                "add {src}, 256",
-                "sub {size}, 256",
-                "jg 2b",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                temp2 = out(ymm_reg) _,
-                temp3 = out(ymm_reg) _,
-                temp4 = out(ymm_reg) _,
-                temp5 = out(ymm_reg) _,
-                temp6 = out(ymm_reg) _,
-                temp7 = out(ymm_reg) _,
-                size = inout(reg) size,
-            )
-        } else {
-            unreachable!();
-        }
-    }
-}
-
-#[allow(unused_assignments)]
-#[cfg(target_feature = "avx2")]
-pub fn ymmntcpy_short_prefetch_aligned(
-    mut dest: *mut c_void,
-    mut src: *const c_void,
-    mut size: usize,
-) {
-    unsafe {
-        if size % 64 == 0 {
-            asm!(
-                "2:",
-                "prefetchnta [{src} + 64]",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp1}, [{src} + 32]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "vmovntdq [{dest} + 32], {temp1}",
-                "add {dest}, 64",
-                "add {src}, 64",
-                "sub {size}, 64",
-                "jg 2b",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-                temp1 = out(ymm_reg) _,
-                size = inout(reg) size,
-            );
-        } else if size % 32 == 0 {
-            asm!(
-                "2:",
-                "prefetchnta [{src} + 32]",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "add {dest}, 32",
-                "add {src}, 32",
-                "sub {size}, 32",
-                "jg 2b",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-                size = inout(reg) size,
-            );
-        } else if size % 16 == 0 {
-            asm!(
-                "2:",
-                "prefetchnta [{src} + 32]",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                "add {dest}, 16",
-                "add {src}, 16",
-                "sub {size}, 32",
-                "jg 2b",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(xmm_reg) _,
-                size = inout(reg) size,
-            );
-        }
-    }
-}
-
 #[cfg(target_feature = "avx512f")]
 pub fn avx512ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
     unsafe {
         while size >= 128 {
             asm!(
-                "prefetchnta [{src} + 128]",
-                "prefetchnta [{src} + 192]",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdqa {temp0}, [{src} + 64]",
+                "prefetchnta [{src} + 0]",
+                "prefetchnta [{src} + 64]",
+                "vmovdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 64]",
                 "vmovntdq [{dest} + 0], {temp0}",
                 "vmovntdq [{dest} + 64], {temp1}",
                 dest = inout(reg) dest,
@@ -719,7 +360,8 @@ pub fn avx512ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
         }
         if size >= 64 {
             asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
+                "prefetchnta [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
                 "vmovntdq [{dest} + 0], {temp0}",
                 dest = inout(reg) dest,
                 src = inout(reg) src,
@@ -731,7 +373,7 @@ pub fn avx512ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
         }
         if size >= 32 {
             asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
                 "vmovntdq [{dest} + 0], {temp0}",
                 dest = inout(reg) dest,
                 src = inout(reg) src,
@@ -743,56 +385,7 @@ pub fn avx512ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
         }
         if size >= 16 {
             asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(xmm_reg) _,
-            );
-            dest = dest.add(16);
-            src = src.add(16);
-            size -= 32;
-        }
-        while size != 0 {
-            *(dest as *mut u8) = *(src as *const u8);
-            dest = dest.add(1);
-            src = src.add(1);
-            size -= 1;
-        }
-    }
-}
-
-#[cfg(target_feature = "avx512f")]
-pub fn avx512ntcpy_short(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
-    unsafe {
-        while size >= 64 {
-            asm!(
-                "prefetchnta [{src} + 64]",
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(zmm_reg) _,
-            );
-            dest = dest.add(64);
-            src = src.add(64);
-            size -= 64;
-        }
-        if size >= 32 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
-                "vmovntdq [{dest} + 0], {temp0}",
-                dest = inout(reg) dest,
-                src = inout(reg) src,
-                temp0 = out(ymm_reg) _,
-            );
-            dest = dest.add(32);
-            src = src.add(32);
-            size -= 32;
-        }
-        if size >= 16 {
-            asm!(
-                "vmovntdqa {temp0}, [{src} + 0]",
+                "vmovdqa {temp0}, [{src} + 0]",
                 "vmovntdq [{dest} + 0], {temp0}",
                 dest = inout(reg) dest,
                 src = inout(reg) src,
