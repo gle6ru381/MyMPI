@@ -1,4 +1,3 @@
-#![feature(asm)]
 use std::arch::asm;
 use std::ffi::c_void;
 
@@ -409,8 +408,7 @@ pub fn memcpy(dest: *mut c_void, src: *const c_void, size: usize) {
         if size == 0 {
             return;
         }
-        ymmntcpy(dest, src, size);
-        //MPI_ntcpy(dest, src, size);
+        MPI_ntcpy(dest, src, size);
     } else {
         unsafe { std::ptr::copy(src, dest, size) };
     }
@@ -421,9 +419,14 @@ pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) 
     avx512ntcpy(dest, src, size);
 }
 
+#[cfg(all(target_feature = "avx", not(target_feature = "avx2")))]
+pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize){
+    avx_ntcpy(dest, src, size);
+}
+
 #[cfg(all(target_feature = "avx2", not(target_feature = "avx512")))]
 pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
-    ymmntcpy(dest, src, size);
+    avx2_ntcpy(dest, src, size);
 }
 
 #[cfg(all(not(target_feature = "avx2"), not(target_feature = "avx512")))]

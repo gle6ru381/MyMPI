@@ -40,7 +40,7 @@ int main()
     std::array<long, nsamples> sendTimes;
 
     if (rank == 0) {
-        auto csvFile = fopen("ntcpy.csv", "w");
+        auto csvFile = fopen("memcpy.csv", "w");
         fprintf(csvFile,
                 "Vector size,Message size,unit,First access min,First access "
                 "median,Second access "
