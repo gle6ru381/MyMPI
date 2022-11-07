@@ -14,7 +14,6 @@ jobs:
           - stable
           - beta
           - 1.64
-          - 1.56
 
     steps:
       - uses: actions/checkout@v2
