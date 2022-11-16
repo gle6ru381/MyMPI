@@ -1,4 +1,5 @@
 deps/criterion
 /target
 C/build
+C/output/*
 C/*.user

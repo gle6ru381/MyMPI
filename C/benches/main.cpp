@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <vector>
 
+#define CSV_SEP " , "
+
 template <typename T, size_t N>
 T median(std::array<T, N> const& arr)
 {
@@ -17,11 +19,18 @@ T median(std::array<T, N> const& arr)
             : arr[arr.size() / 2 + 1];
 }
 
-int main()
+int main(int argc, char** argv)
 {
     using clock = std::chrono::high_resolution_clock;
     using std::chrono::duration_cast;
     using unit = std::chrono::nanoseconds;
+
+    char const* fileName;
+    if (argc == 2) {
+        fileName = argv[1];
+    } else {
+        fileName = "memcpy.csv";
+    }
 
     setenv("MPI_SIZE", "2", 1);
     MPI_Init(nullptr, nullptr);
@@ -30,28 +39,26 @@ int main()
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     constexpr int vec_sizes[]
-            = {4096, 125952, 204800, 458752, 921600, 2097152, 3932160};
+            = {125952, 204800, 256000, 458752, 921600, 1572864, 3932160, 6291456, 13631488, 24641536};
     constexpr int msg_sizes[]
-            = {4096, 125952, 204800, 458752, 921600, 2097152, 3932160};
+            = {125952, 204800, 256000, 458752, 921600, 1572864, 3932160, 6291456, 13631488, 24641536};
 
-    constexpr int nsamples = 500;
+    constexpr int nsamples = 20;
     std::array<long, nsamples> fAccess;
     std::array<long, nsamples> sAccess;
     std::array<long, nsamples> sendTimes;
 
     if (rank == 0) {
-        auto csvFile = fopen("memcpy.csv", "w");
+        auto csvFile = fopen(fileName, "w");
         fprintf(csvFile,
-                "Vector size,Message size,unit,First access min,First access "
-                "median,Second access "
-                "min,"
-                "Second access median,Access "
-                "slowdown min,Access slowdown "
-                "median,Send time min,Send "
-                "time median\n");
+                "Vector size" CSV_SEP "Message size" CSV_SEP "unit" CSV_SEP "First access "
+                "min" CSV_SEP
+                "Second access min" CSV_SEP "Access slowdown "
+                "min" CSV_SEP "Send "
+                "time min\n");
         for (int vec_idx = 0; vec_idx < (int)std::size(vec_sizes); vec_idx++) {
-            auto const vec_size = vec_sizes[vec_idx];
-            auto vec = std::vector<char>(vec_size);
+            auto const vec_size = vec_sizes[vec_idx] / 8;
+            auto vec = std::vector<long>(vec_size);
             for (int l = 0; l < (int)vec.size(); l++) {
                 vec[l] = l;
             }
@@ -59,12 +66,13 @@ int main()
             for (int msg_idx = 0; msg_idx < (int)std::size(msg_sizes);
                  msg_idx++) {
                 for (int sample = 0; sample < nsamples; sample++) {
-                    for (int l = 0; l < (int)vec.size(); l++) {
-                        vec[l] = l;
+                    long tmpVal;
+                    for (long l = 0; l < (int)vec_size; l++) {
+                        asm("movq (%1, %2, 8),%2":"=r"(tmpVal):"r"(vec.data()), "r"(l));
                     }
                     auto accessTime = clock::now();
-                    for (int l = 0; l < (int)vec.size(); l++) {
-                        vec[l] = l;
+                    for (long l = 0; l < (int)vec_size; l++) {
+                        asm("movq (%1, %2, 4),%2":"=r"(tmpVal):"r"(vec.data()), "r"(l));
                     }
                     auto accessFirst
                             = duration_cast<unit>(clock::now() - accessTime)
@@ -80,8 +88,8 @@ int main()
                             = duration_cast<unit>(clock::now() - sendTime)
                                       .count();
                     accessTime = clock::now();
-                    for (int l = 0; l < (int)vec.size(); l++) {
-                        vec[l] = l;
+                    for (long l = 0; l < (int)vec_size; l++) {
+                        asm("movq (%1, %2, 4),%2":"=r"(tmpVal):"r"(vec.data()), "r"(l));
                     }
                     auto accessSecond
                             = duration_cast<unit>(clock::now() - accessTime)
@@ -130,20 +138,16 @@ int main()
                 auto sendTimeMedian = median(sendTimes);
 
                 fprintf(csvFile,
-                        "%d,%d,%s,%ld,%ld,%ld,%ld,%lf,%"
-                        "lf,"
-                        "%ld,%ld\n",
-                        vec_size,
+                        "%d" CSV_SEP "%d" CSV_SEP "%s" CSV_SEP "%ld" CSV_SEP "%ld" CSV_SEP "%"
+                        "lf" CSV_SEP
+                        "%ld\n",
+                        vec_sizes[vec_idx],
                         msg_sizes[msg_idx],
                         "ns",
                         fAccessMin,
-                        fAccessMedian,
                         sAccessMin,
-                        sAccessMedian,
                         accessSlowdownMin,
-                        accessSlowdownMedian,
-                        sendTimeMin,
-                        sendTimeMedian);
+                        sendTimeMin);
                 //                if (nsamples % 2 != 0) {
                 //                    auto [accessTime, sendTime] =
                 //                    samples[nsamples / 2 + 1]; printf("%d |

@@ -4,9 +4,9 @@ use std::ffi::c_void;
 #[cfg(target_feature = "sse2")]
 pub fn sse2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
-        if dest as usize % 32 != 0 || src as usize % 32 != 0 {
-            if dest as usize % 32 == src as usize % 32 {
-                while dest as usize % 32 != 0 {
+        if dest as usize % 16 != 0 || src as usize % 16 != 0 {
+            if dest as usize % 16 == src as usize % 16 {
+                while dest as usize % 16 != 0 {
                     *(dest as *mut u8) = *(src as *const u8);
                     dest = dest.add(1);
                     src = src.add(1);
@@ -108,6 +108,7 @@ pub fn sse2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
             src = src.add(1);
             size -= 1;
         }
+        asm!("sfence");
     }
 }
 
@@ -243,6 +244,21 @@ pub fn avx2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
 #[cfg(target_feature = "avx")]
 pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
     unsafe {
+        if dest as usize % 16 != 0 || src as usize % 16 != 0 {
+            if dest as usize % 16 == src as usize % 16 {
+                while dest as usize % 16 != 0 {
+                    *(dest as *mut u8) = *(src as *const u8);
+                    dest = dest.add(1);
+                    src = src.add(1);
+                    size -= 1;
+                }
+            } else {
+                std::ptr::copy(src, dest, size);
+                return;
+            }
+        }
+        debug_assert!(dest as usize % 16 == 0);
+        debug_assert!(src as usize % 16 == 0);
         while n >= 128 {
             asm!(
                 "prefetchnta [{src} + 0]",
@@ -334,11 +350,12 @@ pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
             src = src.add(1);
             n -= 1;
         }
+        asm!("sfence");
     }
 }
 
 #[cfg(target_feature = "avx512f")]
-pub fn avx512ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
+pub fn avx512_ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
     unsafe {
         while size >= 128 {
             asm!(
@@ -416,11 +433,11 @@ pub fn memcpy(dest: *mut c_void, src: *const c_void, size: usize) {
 
 #[cfg(target_feature = "avx512")]
 pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
-    avx512ntcpy(dest, src, size);
+    avx512_ntcpy(dest, src, size);
 }
 
 #[cfg(all(target_feature = "avx", not(target_feature = "avx2")))]
-pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize){
+pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
     avx_ntcpy(dest, src, size);
 }
 
@@ -429,7 +446,17 @@ pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) 
     avx2_ntcpy(dest, src, size);
 }
 
-#[cfg(all(not(target_feature = "avx2"), not(target_feature = "avx512")))]
+#[cfg(all(target_feature = "sse2", not(target_feature = "avx")))]
 pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
-    std::ptr::copy(src, dest, size)
+    sse2_ntcpy(dest, src, size);
+}
+
+#[cfg(all(
+    not(target_feature = "avx2"),
+    not(target_feature = "avx512"),
+    not(target_feature = "avx"),
+    not(target_feature = "sse2")
+))]
+pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) {
+    unsafe { std::ptr::copy(src, dest, size) }
 }

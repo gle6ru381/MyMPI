@@ -65,11 +65,11 @@ macro_rules! test_aligned {
     };
 }
 
-test_cpy!(ymmntcpy_test, ymmntcpy);
-test_aligned!(ymmntcpy_aligned_test, ymmntcpy_aligned);
-test_cpy!(ymmntcpy_short_test, ymmntcpy_short);
-test_cpy!(ymmntcpy_short_prefetch_test, ymmntcpy_short_prefetch);
-test_aligned!(
-    ymmntcpy_short_prefetch_alignment_test,
-    ymmntcpy_short_prefetch_aligned
-);
+#[cfg(target_feature = "sse2")]
+test_cpy!(sse2cpy_test, sse2_ntcpy);
+#[cfg(target_feature = "avx")]
+test_cpy!(avxcpy_test, avx_ntcpy);
+#[cfg(target_feature = "avx2")]
+test_cpy!(avx2cpy_test, avx2_ntcpy);
+#[cfg(target_feature = "avx512")]
+test_cpy!(avx512cpy_test, avx512_ntcpy);

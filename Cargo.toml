@@ -15,16 +15,16 @@ crate-type = ["rlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["quiet"]
+default = ["quiet", "ntcpy"]
 ntcpy = []
 quiet = []
 
-[dev-dependencies]
-criterion = {path = "deps/criterion", features = ["html_reports"]}
+#[dev-dependencies]
+#criterion = {path = "deps/criterion", features = ["html_reports"]}
 
-[[bench]]
-name = "mem_benchmark"
-harness = false
+#[[bench]]
+#name = "mem_benchmark"
+#harness = false
 
 [dependencies]
 libc = "0.2"

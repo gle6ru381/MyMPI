@@ -1,5 +1,5 @@
 [build]
-rustflags = ["-C", "target-feature=+avx,+avx2"]
+rustflags = ["-C", "target-feature=+sse2"]
 
 [env]
 RUST_TEST_THREADS = "1"
