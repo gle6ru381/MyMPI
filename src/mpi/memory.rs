@@ -248,10 +248,10 @@ pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
                     *(dest as *mut u8) = *(src as *const u8);
                     dest = dest.add(1);
                     src = src.add(1);
-                    size -= 1;
+                    n -= 1;
                 }
             } else {
-                std::ptr::copy(src, dest, size);
+                std::ptr::copy(src, dest, n);
                 return;
             }
         }
@@ -653,10 +653,10 @@ pub fn avx_cpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
                     *(dest as *mut u8) = *(src as *const u8);
                     dest = dest.add(1);
                     src = src.add(1);
-                    size -= 1;
+                    n -= 1;
                 }
             } else {
-                std::ptr::copy(src, dest, size);
+                std::ptr::copy(src, dest, n);
                 return;
             }
         }
