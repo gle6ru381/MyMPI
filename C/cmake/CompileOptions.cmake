@@ -3,7 +3,7 @@ function(set_compile_options target_name)
     if(${build_type} STREQUAL release)
         target_compile_options(${target_name} PRIVATE -O2)
     else()
-        target_compile_options(${target_name} PRIVATE -g2 -Wall -Wextra -pedantic -O0)
+        target_compile_options(${target_name} PRIVATE -g2 -Wall -Wextra -pedantic -O2)
     endif()
 
     add_link_options(-static-libgcc -static-libstdc++)

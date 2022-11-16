@@ -38,10 +38,26 @@ int main(int argc, char** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    constexpr int vec_sizes[]
-            = {125952, 204800, 256000, 458752, 921600, 1572864, 3932160, 6291456, 13631488, 24641536};
-    constexpr int msg_sizes[]
-            = {125952, 204800, 256000, 458752, 921600, 1572864, 3932160, 6291456, 13631488, 24641536};
+    constexpr int vec_sizes[] = {125952,
+                                 204800,
+                                 256000,
+                                 458752,
+                                 921600,
+                                 1572864,
+                                 3932160,
+                                 6291456,
+                                 13631488,
+                                 24641536};
+    constexpr int msg_sizes[] = {125952,
+                                 204800,
+                                 256000,
+                                 458752,
+                                 921600,
+                                 1572864,
+                                 3932160,
+                                 6291456,
+                                 13631488,
+                                 24641536};
 
     constexpr int nsamples = 20;
     std::array<long, nsamples> fAccess;
@@ -51,10 +67,12 @@ int main(int argc, char** argv)
     if (rank == 0) {
         auto csvFile = fopen(fileName, "w");
         fprintf(csvFile,
-                "Vector size" CSV_SEP "Message size" CSV_SEP "unit" CSV_SEP "First access "
+                "Vector size" CSV_SEP "Message size" CSV_SEP "unit" CSV_SEP
+                "First access "
+                "min" CSV_SEP "Second access min" CSV_SEP
+                "Access slowdown "
                 "min" CSV_SEP
-                "Second access min" CSV_SEP "Access slowdown "
-                "min" CSV_SEP "Send "
+                "Send "
                 "time min\n");
         for (int vec_idx = 0; vec_idx < (int)std::size(vec_sizes); vec_idx++) {
             auto const vec_size = vec_sizes[vec_idx] / 8;
@@ -67,12 +85,17 @@ int main(int argc, char** argv)
                  msg_idx++) {
                 for (int sample = 0; sample < nsamples; sample++) {
                     long tmpVal;
+                    auto data = vec.data();
                     for (long l = 0; l < (int)vec_size; l++) {
-                        asm("movq (%1, %2, 8),%2":"=r"(tmpVal):"r"(vec.data()), "r"(l));
+                        asm volatile("movq (%1, %2, 8),%2"
+                                     : "=r"(tmpVal)
+                                     : "r"(data), "r"(l));
                     }
                     auto accessTime = clock::now();
                     for (long l = 0; l < (int)vec_size; l++) {
-                        asm("movq (%1, %2, 4),%2":"=r"(tmpVal):"r"(vec.data()), "r"(l));
+                        asm volatile("movq (%1, %2, 8),%2"
+                                     : "=r"(tmpVal)
+                                     : "r"(data), "r"(l));
                     }
                     auto accessFirst
                             = duration_cast<unit>(clock::now() - accessTime)
@@ -89,7 +112,9 @@ int main(int argc, char** argv)
                                       .count();
                     accessTime = clock::now();
                     for (long l = 0; l < (int)vec_size; l++) {
-                        asm("movq (%1, %2, 4),%2":"=r"(tmpVal):"r"(vec.data()), "r"(l));
+                        asm volatile("movq (%1, %2, 8),%2"
+                                     : "=r"(tmpVal)
+                                     : "r"(data), "r"(l));
                     }
                     auto accessSecond
                             = duration_cast<unit>(clock::now() - accessTime)
@@ -138,9 +163,10 @@ int main(int argc, char** argv)
                 auto sendTimeMedian = median(sendTimes);
 
                 fprintf(csvFile,
-                        "%d" CSV_SEP "%d" CSV_SEP "%s" CSV_SEP "%ld" CSV_SEP "%ld" CSV_SEP "%"
-                        "lf" CSV_SEP
-                        "%ld\n",
+                        "%d" CSV_SEP "%d" CSV_SEP "%s" CSV_SEP "%ld" CSV_SEP
+                        "%ld" CSV_SEP
+                        "%"
+                        "lf" CSV_SEP "%ld\n",
                         vec_sizes[vec_idx],
                         msg_sizes[msg_idx],
                         "ns",

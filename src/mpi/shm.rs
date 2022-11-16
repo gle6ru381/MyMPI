@@ -21,10 +21,10 @@ macro_rules! field_size {
 
 #[repr(C)]
 struct Cell {
-    pub len: i32,         // 4
-    pub tag: i32,         // 8
-    m_flag: i8,           // 9
-    pub pad: [i8; 23],    // 32
+    pub len: i32,             // 4
+    pub tag: i32,             // 8
+    m_flag: i8,               // 9
+    pub pad: [i8; 23],        // 32
     pub buff: [i8; 16777184], // 16 777 216
 }
 
