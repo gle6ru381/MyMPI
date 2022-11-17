@@ -1,4 +1,5 @@
 function(set_compile_options target_name)
+    message("build type: ${CMAKE_BUILD_TYPE}")
     string(TOLOWER ${CMAKE_BUILD_TYPE} build_type)
     if(${build_type} STREQUAL release)
         target_compile_options(${target_name} PRIVATE -O2)

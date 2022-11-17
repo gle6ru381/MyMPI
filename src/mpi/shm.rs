@@ -25,7 +25,7 @@ struct Cell {
     pub tag: i32,             // 8
     m_flag: i8,               // 9
     pub pad: [i8; 23],        // 32
-    pub buff: [i8; 16777184], // 16 777 216
+    pub buff: [i8; 33554400], // 33 554 432
 }
 
 impl Cell {

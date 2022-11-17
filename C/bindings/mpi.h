@@ -1,3 +1,4 @@
+#pragma once
 #include <inttypes.h>
 #include <stddef.h>
 #define MPI_EXPORT __attribute__((visibility("default")))

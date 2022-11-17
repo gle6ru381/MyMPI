@@ -1,5 +1,7 @@
 deps/criterion
 /target
+build
+.vscode
 C/build
 C/output/*
 C/*.user
