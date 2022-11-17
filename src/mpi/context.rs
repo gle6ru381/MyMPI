@@ -26,14 +26,68 @@ static mut CONTEXT: Context = Context {
     comm_group: CommGroup::new(),
 };
 
+struct SlurmData {
+    size: i32,
+    rank: i32,
+    key: i32,
+}
+
 impl Context {
-    fn get_env() {
-        let size = std::env::var("MPI_SIZE")
-            .unwrap_or(String::from(""))
-            .parse::<i32>()
-            .unwrap_or(0);
-        debug_assert!(size > 0);
-        unsafe { CONTEXT.mpi_size = size };
+    fn get_mpi() -> Option<i32> {
+        let size_env = std::env::var("MPI_SIZE");
+        if let Ok(size) = size_env {
+            if let Ok(res) = size.parse() {
+                return Some(res);
+            }
+        }
+        None
+    }
+
+    fn get_slurm() -> Option<SlurmData> {
+        let rank_env = std::env::var("SLURM_PROCID");
+        if let Ok(rank) = rank_env {
+            let size_env = std::env::var("SLURM_NTASKS_PER_NODE");
+            if let Ok(size) = size_env {
+                let size_i = size.parse();
+                let rank_i = rank.parse();
+                if size_i.is_ok() && rank_i.is_ok() {
+                    let key = std::env::var("SLURM_JOBID")
+                        .unwrap_or(String::from("-1"))
+                        .parse()
+                        .unwrap_or(-1);
+                    return unsafe {
+                        Some(SlurmData {
+                            size: size_i.unwrap_unchecked(),
+                            rank: rank_i.unwrap_unchecked(),
+                            key,
+                        })
+                    };
+                }
+            }
+            return Some(SlurmData {
+                size: 1,
+                rank: 0,
+                key: 0,
+            });
+        }
+        None
+    }
+
+    fn get_env() -> i32 {
+        unsafe {
+            if let Some(size) = Self::get_mpi() {
+                CONTEXT.mpi_size = size;
+                CONTEXT.mpi_rank = -1;
+                return -1;
+            } else if let Some(data) = Self::get_slurm() {
+                CONTEXT.mpi_size = data.size;
+                CONTEXT.mpi_rank = data.rank;
+                debug_assert!(data.key >= 0);
+                return data.key;
+            } else {
+                panic!();
+            }
+        }
     }
 
     pub fn comm() -> &'static mut CommGroup {
@@ -132,16 +186,18 @@ impl Context {
                 println!("Using non temporal copy");
             }
 
-            Self::get_env();
+            let key = Self::get_env();
 
-            let mut code = CONTEXT.shm.init(pargc, pargv);
+            let mut code = CONTEXT.shm.init(pargc, pargv, key);
             if code != MPI_SUCCESS {
                 CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
             }
 
-            code = Self::split_proc(0, CONTEXT.mpi_size);
-            if code != MPI_SUCCESS {
-                return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
+            if CONTEXT.mpi_rank == -1 {
+                code = Self::split_proc(0, CONTEXT.mpi_size);
+                if code != MPI_SUCCESS {
+                    return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
+                }
             }
 
             code = CONTEXT.comm_group.init(pargc, pargv);

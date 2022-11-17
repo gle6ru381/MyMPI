@@ -1,7 +1,14 @@
 include(CompileOptions)
-set(target_name bench)
+set(target_name bench_p2p)
 
-add_executable(${target_name} main.cpp)
+add_executable(${target_name} p2p.cpp)
+
+set_compile_options(${target_name})
+link_mpi(${target_name})
+
+set(target_name bench_bcast)
+
+add_executable(${target_name} bcast.cpp)
 
 set_compile_options(${target_name})
 link_mpi(${target_name})

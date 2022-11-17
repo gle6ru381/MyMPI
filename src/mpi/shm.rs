@@ -90,6 +90,7 @@ impl MpiShm {
 
 pub struct ShmData {
     d: *mut MpiShm,
+    shm_key: i32,
     recv_queue: RequestQueue,
     send_queue: RequestQueue,
     unexp_queue: RequestQueue,
@@ -115,6 +116,7 @@ impl ShmData {
     pub const fn new() -> ShmData {
         ShmData {
             d: null_mut(),
+            shm_key: -1,
             recv_queue: RequestQueue::new_c(),
             send_queue: RequestQueue::new_c(),
             unexp_queue: RequestQueue::new_c(),
@@ -165,20 +167,56 @@ impl ShmData {
         MPI_SUCCESS
     }
 
-    pub fn deallocate(&mut self) -> i32 {
+    pub fn allocate_by_key(&mut self, key: i32) -> i32 {
         unsafe {
-            libc::munmap(
-                self.d as *mut c_void,
-                size_of::<MpiShm>() * (Context::size() * Context::size()) as usize,
-            );
+            let len = size_of::<MpiShm>() * (Context::size() * Context::size()) as usize;
+            let mut id = -1;
+            if Context::rank() == 0 {
+                id = libc::shmget(key, len, 0o666 | libc::IPC_CREAT);
+                assert!(id != -1);
+            } else {
+                let errno = &*libc::__errno_location();
+                loop {
+                    id = libc::shmget(key, len, 0o666);
+                    if id != -1 || *errno != libc::ENOENT {
+                        break;
+                    }
+                }
+                assert!(id != -1);
+            }
+            self.d = libc::shmat(id, null(), 0) as *mut MpiShm;
+            if self.d as i64 == -1 {
+                return !MPI_SUCCESS;
+            }
+            self.shm_key = id;
         }
         MPI_SUCCESS
     }
 
-    pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8) -> i32 {
+    pub fn deallocate(&mut self) -> i32 {
+        unsafe {
+            if self.shm_key == -1 {
+                libc::munmap(
+                    self.d as *mut c_void,
+                    size_of::<MpiShm>() * (Context::size() * Context::size()) as usize,
+                );
+            } else {
+                libc::shmdt(self.d as *mut c_void);
+            }
+        }
+        MPI_SUCCESS
+    }
+
+    pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8, key: i32) -> i32 {
         debug_assert!(!Context::is_init());
-        if self.allocate() != MPI_SUCCESS {
-            return MPI_ERR_INTERN;
+        if key == -1 {
+            if self.allocate() != MPI_SUCCESS {
+                return MPI_ERR_INTERN;
+            }
+        } else {
+            if self.allocate_by_key(key) != MPI_SUCCESS {
+                return MPI_ERR_INTERN;
+            }
         }
         MPI_SUCCESS
     }

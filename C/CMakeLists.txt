@@ -9,3 +9,4 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
 add_subdirectory(benches)
 add_subdirectory(bindings)
+add_subdirectory(tests)
