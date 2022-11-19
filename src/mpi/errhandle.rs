@@ -110,8 +110,7 @@ macro_rules! MPI_CHECK_TYPE {
 #[macro_export]
 #[cfg(not(debug_assertions))]
 macro_rules! MPI_CHECK_TYPE {
-    ($dtype:expr, $comm:expr) => {
-    };
+    ($dtype:expr, $comm:expr) => {};
 }
 
 #[macro_export]
@@ -125,8 +124,7 @@ macro_rules! MPI_CHECK_OP {
 #[macro_export]
 #[cfg(not(debug_assertions))]
 macro_rules! MPI_CHECK_OP {
-    ($op:expr, $comm:expr) => {
-    };
+    ($op:expr, $comm:expr) => {};
 }
 
 #[macro_export]

@@ -385,7 +385,7 @@ pub extern "C" fn MPI_Comm_size(comm: MPI_Comm, psize: *mut i32) -> i32 {
     MPI_CHECK!(!psize.is_null(), comm, MPI_ERR_ARG);
 
     unsafe {
-        psize.write( Context::comm_size(comm));
+        psize.write(Context::comm_size(comm));
     }
 
     MPI_SUCCESS
