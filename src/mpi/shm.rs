@@ -305,7 +305,7 @@ impl ShmData {
 
         let mut length = req.cnt as usize;
         let mut buf = req.buf;
-        debug_assert!(buf as usize % 32 == 0 || length == 0, "Length: {length}");
+        //debug_assert!(buf as usize % 32 == 0 || length == 0, "Length: {length}");
         debug!("Recv length: {length}");
         while length > Cell::buf_len() {
             memcpy(
@@ -321,11 +321,11 @@ impl ShmData {
             length -= Cell::buf_len();
         }
 
-        debug_assert!(
-            buf as usize % 32 == 0 || length == 0,
-            "Buff alignment: {}",
-            buf as usize % 32
-        );
+        // debug_assert!(
+        //     buf as usize % 32 == 0 || length == 0,
+        //     "Buff alignment: {}",
+        //     buf as usize % 32
+        // );
         debug_assert!(pshm.recv_cell().buff.as_ptr() as *const c_void as usize % 32 == 0);
         memcpy(buf, pshm.recv_cell().buff.as_ptr() as *const c_void, length);
         pshm.recv_cell().setFlag(0);

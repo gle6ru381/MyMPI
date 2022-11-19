@@ -311,6 +311,10 @@ fn test_bcast_4() {
 
     assert_eq!(unsafe { from_raw_parts(rbuf, expect.len()) }, expect);
 
+    unsafe {
+        dealloc(rbuf, layout);
+    }
+
     MPI_Finalize();
 }
 
@@ -347,5 +351,265 @@ fn test_bcast_8() {
 
     assert_eq!(unsafe { from_raw_parts(rbuf, expect.len()) }, expect);
 
+    unsafe {
+        dealloc(rbuf, layout);
+    }
+
+    MPI_Finalize();
+}
+
+#[test]
+fn test_gather_4() {
+    set_var("MPI_SIZE", "4");
+
+    MPI_Init(null_mut(), null_mut());
+
+    let mut size: i32 = 0;
+    let mut rank: i32 = 0;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &mut size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
+
+    let mut buf: [u8; 400] = [0; 400];
+
+    for val in (rank * 100)..(rank * 100 + 100) {
+        buf[val as usize] = (val + 1) as u8;
+    }
+
+    unsafe {
+        MPI_Gather(
+            buf.as_ptr().add((rank * 100) as usize) as *mut c_void,
+            100,
+            MPI_BYTE,
+            buf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_BYTE,
+            0,
+            MPI_COMM_WORLD,
+        );
+    }
+
+    if rank == 0 {
+        for val in 0..400 {
+            assert_eq!(buf[val as usize], (val + 1) as u8);
+        }
+    }
+
+    unsafe {
+        MPI_Allgather(
+            buf.as_ptr().add((rank * 100) as usize) as *mut c_void,
+            100,
+            MPI_BYTE,
+            buf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_BYTE,
+            MPI_COMM_WORLD,
+        );
+    }
+
+    for val in 0..400 {
+        assert_eq!(buf[val as usize], (val + 1) as u8);
+    }
+
+    MPI_Finalize();
+}
+
+#[test]
+fn test_gather_8() {
+    set_var("MPI_SIZE", "8");
+
+    MPI_Init(null_mut(), null_mut());
+
+    let mut size: i32 = 0;
+    let mut rank: i32 = 0;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &mut size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
+
+    let mut buf: [u8; 800] = [0; 800];
+
+    for val in (rank * 100)..(rank * 100 + 100) {
+        buf[val as usize] = (val + 1) as u8;
+    }
+
+    unsafe {
+        MPI_Gather(
+            buf.as_ptr().add((rank * 100) as usize) as *mut c_void,
+            100,
+            MPI_BYTE,
+            buf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_BYTE,
+            0,
+            MPI_COMM_WORLD,
+        );
+    }
+
+    if rank == 0 {
+        for val in 0..800 {
+            assert_eq!(buf[val as usize], (val + 1) as u8);
+        }
+    }
+
+    unsafe {
+        MPI_Allgather(
+            buf.as_ptr().add((rank * 100) as usize) as *mut c_void,
+            100,
+            MPI_BYTE,
+            buf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_BYTE,
+            MPI_COMM_WORLD,
+        );
+    }
+
+    for val in 0..800 {
+        assert_eq!(buf[val as usize], (val + 1) as u8);
+    }
+
+    MPI_Finalize();
+}
+
+#[test]
+fn test_reduce_4() {
+    set_var("MPI_SIZE", "4");
+
+    MPI_Init(null_mut(), null_mut());
+
+    let mut size: i32 = 0;
+    let mut rank: i32 = 0;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &mut size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
+
+    let mut buf: [i32; 400] = [0; 400];
+    let mut rbuf: [i32; 100] = [0; 100];
+
+    for val in (rank * 100)..(rank * 100 + 100) {
+        buf[val as usize] = val;
+    }
+
+    unsafe {
+        MPI_Reduce(
+            buf.as_mut_ptr().add((rank * 100) as usize) as *mut c_void,
+            rbuf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_INT,
+            MPI_MAX,
+            0,
+            MPI_COMM_WORLD,
+        );
+
+        if rank == 0 {
+            for val in 0..100 {
+                assert_eq!(rbuf[val as usize], (size - 1) * 100 + val);
+            }
+        }
+
+        MPI_Reduce(
+            buf.as_mut_ptr().add((rank * 100) as usize) as *mut c_void,
+            rbuf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_INT,
+            MPI_SUM,
+            0,
+            MPI_COMM_WORLD,
+        );
+
+        if rank == 0 {
+            for val in 0..100 {
+                let mut test = val;
+                for v in 1..size {
+                    test += v * 100 + val;
+                }
+                assert_eq!(rbuf[val as usize], test);
+            }
+        }
+
+        MPI_Allreduce(
+            buf.as_mut_ptr().add((rank * 100) as usize) as *mut c_void,
+            rbuf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_INT,
+            MPI_MIN,
+            MPI_COMM_WORLD,
+        );
+
+        for val in 0..100 {
+            assert_eq!(rbuf[val as usize], val);
+        }
+    }
+    MPI_Finalize();
+}
+
+#[test]
+fn test_reduce_8() {
+    set_var("MPI_SIZE", "8");
+
+    MPI_Init(null_mut(), null_mut());
+
+    let mut size: i32 = 0;
+    let mut rank: i32 = 0;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &mut size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
+
+    let mut buf: [i32; 800] = [0; 800];
+    let mut rbuf: [i32; 100] = [0; 100];
+
+    for val in (rank * 100)..(rank * 100 + 100) {
+        buf[val as usize] = val;
+    }
+
+    unsafe {
+        MPI_Reduce(
+            buf.as_mut_ptr().add((rank * 100) as usize) as *mut c_void,
+            rbuf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_INT,
+            MPI_MAX,
+            0,
+            MPI_COMM_WORLD,
+        );
+
+        if rank == 0 {
+            for val in 0..100 {
+                assert_eq!(rbuf[val as usize], (size - 1) * 100 + val);
+            }
+        }
+
+        MPI_Reduce(
+            buf.as_mut_ptr().add((rank * 100) as usize) as *mut c_void,
+            rbuf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_INT,
+            MPI_SUM,
+            0,
+            MPI_COMM_WORLD,
+        );
+
+        if rank == 0 {
+            for val in 0..100 {
+                let mut test = val;
+                for v in 1..size {
+                    test += v * 100 + val;
+                }
+                assert_eq!(rbuf[val as usize], test);
+            }
+        }
+
+        MPI_Allreduce(
+            buf.as_mut_ptr().add((rank * 100) as usize) as *mut c_void,
+            rbuf.as_mut_ptr() as *mut c_void,
+            100,
+            MPI_INT,
+            MPI_MIN,
+            MPI_COMM_WORLD,
+        );
+
+        for val in 0..100 {
+            assert_eq!(rbuf[val as usize], val);
+        }
+    }
     MPI_Finalize();
 }

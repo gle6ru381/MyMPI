@@ -267,7 +267,7 @@ pub extern "C" fn MPI_Reduce(
         let mut ext = uninit();
         let diff = (Context::size() + Context::rank() - root) % Context::size();
 
-        debug!("&&&Reduce begin");
+        debug_1!("Reduce begin");
 
         code = MPI_Type_size(dtype, &mut ext);
         if code != MPI_SUCCESS {
@@ -286,7 +286,7 @@ pub extern "C" fn MPI_Reduce(
         }
 
         if diff % 2 != 0 {
-            debug!(
+            debug_1!(
                 "Send to {}",
                 (Context::size() + Context::rank() - 1) % Context::size()
             );
@@ -299,7 +299,7 @@ pub extern "C" fn MPI_Reduce(
                 comm,
             );
         } else if diff < (Context::size() - 1) {
-            debug!("Recv from {}", (Context::rank() + 1) % Context::size());
+            debug_1!("Recv from {}", (Context::rank() + 1) % Context::size());
             code = MPI_Recv(
                 rbuf,
                 cnt,
@@ -310,7 +310,7 @@ pub extern "C" fn MPI_Reduce(
                 &mut stat,
             );
             if code == MPI_SUCCESS {
-                debug!("Do reduce function {cnt}, {dtype}");
+                debug_1!("Do reduce function {cnt}, {dtype}");
                 FUNCTIONS[op as usize](sbuf, rbuf, cnt, dtype);
             }
         }
@@ -321,7 +321,7 @@ pub extern "C" fn MPI_Reduce(
             if diff % 4 != 0 {
                 if diff % 2 == 0 {
                     if diff < Context::size() - 1 {
-                        debug!(
+                        debug_1!(
                             "Write to {}",
                             (Context::size() + Context::rank() - 2) % Context::size()
                         );
@@ -334,7 +334,7 @@ pub extern "C" fn MPI_Reduce(
                             comm,
                         );
                     } else {
-                        debug!(
+                        debug_1!(
                             "Write to {}",
                             (Context::size() + Context::rank() - 2) % Context::size()
                         );
@@ -361,7 +361,7 @@ pub extern "C" fn MPI_Reduce(
                     return MPI_ERR_INTERN;
                 }
 
-                debug!("Recv from {}", (Context::rank() + 2) % Context::size());
+                debug_1!("Recv from {}", (Context::rank() + 2) % Context::size());
                 code = MPI_Recv(
                     tbuf,
                     cnt,
@@ -372,7 +372,7 @@ pub extern "C" fn MPI_Reduce(
                     &mut stat,
                 );
                 if code == MPI_SUCCESS {
-                    debug!("Do function");
+                    debug_1!("Do function");
                     FUNCTIONS[op as usize](tbuf, rbuf, cnt, dtype);
                 }
             }
@@ -384,7 +384,7 @@ pub extern "C" fn MPI_Reduce(
                     if diff % i != 0 {
                         if diff % iold == 0 {
                             if diff < Context::size() - 1 {
-                                debug!(
+                                debug_1!(
                                     "Send to: {}",
                                     (Context::size() + Context::rank() - iold) % Context::size()
                                 );
@@ -397,7 +397,7 @@ pub extern "C" fn MPI_Reduce(
                                     comm,
                                 );
                             } else {
-                                debug!(
+                                debug_1!(
                                     "Send to: {}",
                                     (Context::size() + Context::rank() - iold) % Context::size()
                                 );
@@ -412,7 +412,7 @@ pub extern "C" fn MPI_Reduce(
                             }
                         }
                     } else if diff < Context::size() - iold {
-                        debug!("Recv from: {}", (Context::rank() + iold) % Context::size());
+                        debug_1!("Recv from: {}", (Context::rank() + iold) % Context::size());
                         code = MPI_Recv(
                             tbuf,
                             cnt,
@@ -449,7 +449,7 @@ pub extern "C" fn MPI_Reduce(
         }
     }
 
-    debug!("@@@Reduce end");
+    debug_1!("Reduce end");
     cg.dec_key(comm);
 
     code
@@ -473,7 +473,7 @@ pub extern "C" fn MPI_Allreduce(
         n <<= 1;
     }
     n >>= 1;
-    if n == Context::size() {
+    if n == Context::size() && false {
         let mut stat = MPI_Status::uninit();
 
         if cnt == 0 {
@@ -531,7 +531,7 @@ pub extern "C" fn MPI_Allreduce(
                         cnt,
                         dtype,
                         Context::rank() ^ i,
-                        REDUCE_TAG,
+                        ALLREDUCE_TAG,
                         comm,
                         &mut stat,
                     );
