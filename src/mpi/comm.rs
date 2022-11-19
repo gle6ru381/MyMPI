@@ -109,6 +109,14 @@ impl CommGroup {
         !MPI_SUCCESS
     }
 
+    pub fn deinit(&mut self) -> i32 {
+        debug_assert!(Context::is_init());
+
+        self.comms.clear();
+
+        MPI_SUCCESS
+    }
+
     pub fn size(&self) -> usize {
         self.comms.len()
     }

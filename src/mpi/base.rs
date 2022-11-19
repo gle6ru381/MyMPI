@@ -4,7 +4,7 @@ use crate::{private::*, types::*, MPI_CHECK, MPI_CHECK_COMM};
 pub(crate) fn p_mpi_abort(_: MPI_Comm, _: i32) {
     Context::deinit();
 
-    std::process::exit(-1);
+    panic!();
 }
 
 #[no_mangle]
@@ -32,7 +32,7 @@ pub extern "C" fn MPI_Finalize() -> i32 {
         Context::call_error(MPI_COMM_WORLD, code);
     }
 
-    debug!("Finalize");
+    debug_1!("Finalize");
 
     MPI_SUCCESS
 }

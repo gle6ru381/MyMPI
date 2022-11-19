@@ -1,6 +1,8 @@
 use std::arch::asm;
 use std::ffi::c_void;
 
+use crate::context::Context;
+
 #[cfg(target_feature = "sse2")]
 pub fn sse2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) {
     unsafe {
@@ -816,7 +818,7 @@ pub fn avx512_cpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
 }
 
 pub fn memcpy(dest: *mut c_void, src: *const c_void, size: usize) {
-    if cfg!(feature = "ntcpy") {
+    if cfg!(feature = "ntcpy") || Context::use_nt() {
         if size == 0 {
             return;
         }

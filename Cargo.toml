@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 
 [profile.dev]
-opt-level = 3
+opt-level = 1
 debug = true
 
 [lib]
@@ -18,6 +18,10 @@ crate-type = ["rlib", "cdylib"]
 default = ["quiet"]
 ntcpy = []
 quiet = []
+dbglvl0 = []
+dbglvl1 = ["dbglvl0"]
+dbglvl2 = ["dbglvl1"]
+dbglvl3 = ["dbglvl2"]
 
 [dev-dependencies]
 c_bind = {path = "C"}

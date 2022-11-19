@@ -1,12 +1,9 @@
-use crate::comm::CommGroup;
 pub use crate::private::*;
 use crate::shm::ShmData;
 pub use crate::types::*;
+use crate::{comm::CommGroup, MPI_Barrier};
 use crate::{debug, HandlerContext};
 use std::ffi::CStr;
-
-// #[cfg(test)]
-// use zstr::zstr;
 
 pub struct Context {
     shm: ShmData,
@@ -15,6 +12,7 @@ pub struct Context {
     mpi_size: i32,
     mpi_rank: i32,
     mpi_init: bool,
+    use_nt: bool,
 }
 
 static mut CONTEXT: Context = Context {
@@ -24,6 +22,7 @@ static mut CONTEXT: Context = Context {
     mpi_init: false,
     err_handler: HandlerContext::new(),
     comm_group: CommGroup::new(),
+    use_nt: false,
 };
 
 struct SlurmData {
@@ -33,6 +32,16 @@ struct SlurmData {
 }
 
 impl Context {
+    fn get_use_nt() -> bool {
+        if cfg!(feature = "ntcpy") {
+            return true;
+        }
+        if let Ok(val) = std::env::var("MPI_USE_NT") {
+            return val == "1";
+        }
+        false
+    }
+
     fn get_mpi() -> Option<i32> {
         let size_env = std::env::var("MPI_SIZE");
         if let Ok(size) = size_env {
@@ -75,6 +84,7 @@ impl Context {
 
     fn get_env() -> i32 {
         unsafe {
+            CONTEXT.use_nt = Self::get_use_nt();
             if let Some(size) = Self::get_mpi() {
                 CONTEXT.mpi_size = size;
                 CONTEXT.mpi_rank = -1;
@@ -88,6 +98,10 @@ impl Context {
                 panic!();
             }
         }
+    }
+
+    pub fn use_nt() -> bool {
+        unsafe { CONTEXT.use_nt }
     }
 
     pub fn comm() -> &'static mut CommGroup {
@@ -182,47 +196,48 @@ impl Context {
         unsafe {
             debug_assert!(!CONTEXT.mpi_init);
 
-            if cfg!(feature = "ntcpy") {
-                println!("Using non temporal copy");
-            }
-
             let key = Self::get_env();
 
             let mut code = CONTEXT.shm.init(pargc, pargv, key);
             if code != MPI_SUCCESS {
+                debug_1!("Error shm init");
                 CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
             }
 
             if CONTEXT.mpi_rank == -1 {
                 code = Self::split_proc(0, CONTEXT.mpi_size);
                 if code != MPI_SUCCESS {
+                    debug_1!("Error split processors");
                     return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
                 }
             }
 
             code = CONTEXT.comm_group.init(pargc, pargv);
             if code != MPI_SUCCESS {
+                debug_1!("Error init communicators");
                 return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
             }
 
             CONTEXT.mpi_init = true;
         }
 
+        debug!("Success init");
+
         MPI_SUCCESS
     }
 
     pub fn deinit() -> i32 {
+        MPI_Barrier(MPI_COMM_WORLD);
         unsafe {
             debug_assert!(CONTEXT.mpi_init);
-            debug!("Context deinit");
             CONTEXT.shm.deinit();
+            CONTEXT.comm_group.deinit();
             CONTEXT.mpi_init = false;
             if CONTEXT.mpi_rank == 0 {
                 libc::signal(libc::SIGCHLD, libc::SIG_IGN);
             } else {
                 std::process::exit(0);
             }
-            debug!("Exit deinit");
         }
         MPI_SUCCESS
     }

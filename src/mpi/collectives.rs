@@ -173,12 +173,15 @@ pub extern "C" fn MPI_Bcast(
             n <<= 1;
         }
 
-        n >>= 1;
         loop {
-            debug!("######N={n}");
+            n >>= 1;
+            if n == 0 {
+                code = MPI_SUCCESS;
+                break;
+            }
+
             if Context::rank() == root {
                 if diff + n < Context::size() {
-                    debug!("#######Send to {}", (Context::rank() + n) % Context::size());
                     code = MPI_Send(
                         buf,
                         cnt,
@@ -188,24 +191,18 @@ pub extern "C" fn MPI_Bcast(
                         comm,
                     );
                     if code != MPI_SUCCESS {
+                        debug_1!("Send error");
                         break;
                     }
                 }
             } else if Context::rank() == (root + n) % Context::size() {
-                debug!("##########Recv from {}", root);
                 code = MPI_Recv(buf, cnt, dtype, root, BCAST_TAG, comm, &mut stat);
                 if code != MPI_SUCCESS {
                     break;
                 }
                 root = Context::rank();
-            } else if diff > n {
+            } else if (Context::size() + Context::rank() - root) % Context::size() > n {
                 root = (root + n) % Context::size();
-            }
-
-            n >>= 1;
-            if n <= 0 {
-                code = MPI_SUCCESS;
-                break;
             }
         }
     }

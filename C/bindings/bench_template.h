@@ -63,7 +63,7 @@ void collective_bench(char const* fName, Predicate func)
                13631488,
                24641536};
 
-    constexpr int nsamples = 50;
+    constexpr int nsamples = 100;
     std::array<long, nsamples> fAccess;
     std::array<long, nsamples> sAccess;
     std::array<long, nsamples> sendTimes;

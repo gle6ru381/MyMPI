@@ -4,7 +4,7 @@ use std::{
     env::set_var,
     ffi::CStr,
     ptr::null_mut,
-    slice::from_raw_parts_mut,
+    slice::{from_raw_parts, from_raw_parts_mut},
 };
 
 #[test]
@@ -275,5 +275,77 @@ fn test_big_data() {
         }
     }
     // MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Finalize();
+}
+
+#[test]
+fn test_bcast_4() {
+    set_var("MPI_SIZE", "4");
+
+    MPI_Init(null_mut(), null_mut());
+
+    let mut size: i32 = 0;
+    let mut rank: i32 = 0;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &mut size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
+
+    let layout = Layout::from_size_align(100, 32).unwrap();
+
+    let rbuf: *mut u8 = unsafe { alloc(layout) };
+    let expect = b"Hello world!!!\0";
+
+    if rank == 0 {
+        unsafe {
+            rbuf.copy_from(expect.as_ptr(), expect.len());
+        }
+    }
+
+    MPI_Bcast(
+        rbuf as *mut c_void,
+        expect.len() as i32,
+        MPI_BYTE,
+        0,
+        MPI_COMM_WORLD,
+    );
+
+    assert_eq!(unsafe { from_raw_parts(rbuf, expect.len()) }, expect);
+
+    MPI_Finalize();
+}
+
+#[test]
+fn test_bcast_8() {
+    set_var("MPI_SIZE", "8");
+
+    MPI_Init(null_mut(), null_mut());
+
+    let mut size: i32 = 0;
+    let mut rank: i32 = 0;
+
+    MPI_Comm_size(MPI_COMM_WORLD, &mut size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mut rank);
+
+    let layout = Layout::from_size_align(100, 32).unwrap();
+
+    let rbuf: *mut u8 = unsafe { alloc(layout) };
+    let expect = b"Hello world!!!\0";
+
+    if rank == 0 {
+        unsafe {
+            rbuf.copy_from(expect.as_ptr(), expect.len());
+        }
+    }
+
+    MPI_Bcast(
+        rbuf as *mut c_void,
+        expect.len() as i32,
+        MPI_BYTE,
+        0,
+        MPI_COMM_WORLD,
+    );
+
+    assert_eq!(unsafe { from_raw_parts(rbuf, expect.len()) }, expect);
+
     MPI_Finalize();
 }

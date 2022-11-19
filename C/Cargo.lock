@@ -3,7 +3,7 @@
 version = 3
 
 [[package]]
-name = "C_bind"
+name = "c_bind"
 version = "0.2.0"
 dependencies = [
  "cmake",
