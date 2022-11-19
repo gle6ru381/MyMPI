@@ -19,12 +19,12 @@ default = ["quiet"]
 ntcpy = []
 quiet = []
 
-#[dev-dependencies]
-#criterion = {path = "deps/criterion", features = ["html_reports"]}
+[dev-dependencies]
+c_bind = {path = "C"}
 
-#[[bench]]
-#name = "mem_benchmark"
-#harness = false
+[[bench]]
+name = "cpp_benches"
+harness = false
 
 [dependencies]
 libc = "0.2"

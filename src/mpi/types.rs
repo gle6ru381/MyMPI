@@ -39,6 +39,7 @@ impl MPI_Status {
     }
 
     pub const fn uninit() -> Self {
+        #![allow(invalid_value)]
         unsafe { MaybeUninit::uninit().assume_init() }
     }
 }

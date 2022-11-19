@@ -16,7 +16,7 @@ type FUNC = fn(*const c_void, *mut c_void, i32, i32);
 const FUNCTIONS: [FUNC; 3] = [max, min, sum];
 
 pub(crate) fn p_mpi_check_op(op: MPI_Op, comm: MPI_Comm) -> i32 {
-    MPI_CHECK!(
+    MPI_CHECK_RET!(
         op == MPI_MAX || op == MPI_MIN || op == MPI_SUM,
         comm,
         MPI_ERR_OP

@@ -113,6 +113,14 @@ impl CommGroup {
         self.comms.len()
     }
 
+    pub fn comm_size(&self, idx: i32) -> i32 {
+        self.comms[idx as usize].prank.len() as i32
+    }
+
+    pub fn comm_rank(&self, idx: i32) -> i32 {
+        self.comms[idx as usize].rank
+    }
+
     pub fn err_handler(&self, i: MPI_Comm) -> MPI_Errhandler {
         debug_assert!((i as usize) < self.size() && i >= 0);
         self.comms[i as usize].errh
@@ -304,7 +312,7 @@ impl CommGroup {
     }
 
     pub fn check(&self, comm: MPI_Comm) -> i32 {
-        MPI_CHECK!(
+        MPI_CHECK_RET!(
             comm >= 0 && comm < self.comms.len() as i32,
             MPI_COMM_WORLD,
             MPI_ERR_COMM
@@ -312,11 +320,11 @@ impl CommGroup {
     }
 
     pub fn check_rank(&self, rank: i32, comm: MPI_Comm) -> i32 {
-        let code = MPI_CHECK_COMM!(comm);
+        let code = MPI_CHECK_COMM_RET!(comm);
         if code != MPI_SUCCESS {
             return code;
         }
-        MPI_CHECK!(
+        MPI_CHECK_RET!(
             rank >= 0 && rank < self.comms[comm as usize].prank.len() as i32,
             comm,
             MPI_ERR_RANK
@@ -377,7 +385,7 @@ pub extern "C" fn MPI_Comm_size(comm: MPI_Comm, psize: *mut i32) -> i32 {
     MPI_CHECK!(!psize.is_null(), comm, MPI_ERR_ARG);
 
     unsafe {
-        psize.write(Context::size());
+        psize.write( Context::comm_size(comm));
     }
 
     MPI_SUCCESS
@@ -390,7 +398,7 @@ pub extern "C" fn MPI_Comm_rank(comm: MPI_Comm, prank: *mut i32) -> i32 {
     MPI_CHECK!(!prank.is_null(), comm, MPI_ERR_ARG);
 
     unsafe {
-        prank.write(Context::rank());
+        prank.write(Context::comm_rank(comm));
     }
 
     MPI_SUCCESS

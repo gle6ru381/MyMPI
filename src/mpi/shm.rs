@@ -170,7 +170,7 @@ impl ShmData {
     pub fn allocate_by_key(&mut self, key: i32) -> i32 {
         unsafe {
             let len = size_of::<MpiShm>() * (Context::size() * Context::size()) as usize;
-            let mut id = -1;
+            let mut id;
             if Context::rank() == 0 {
                 id = libc::shmget(key, len, 0o666 | libc::IPC_CREAT);
                 assert!(id != -1);

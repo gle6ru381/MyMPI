@@ -36,3 +36,8 @@ function(link_mpi target_name)
         target_link_libraries(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/../target/release/libmpi.so)
     endif()
 endfunction()
+
+function(link_bench_template target_name)
+    target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/bindings)
+    target_link_libraries(${target_name} PRIVATE cpp_mpi_bench_template)
+endfunction(link_bench_template target_name)

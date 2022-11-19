@@ -1,7 +1,7 @@
 use crate::{private::*, types::*, MPI_CHECK, MPI_CHECK_TYPE};
 
 pub(crate) fn p_mpi_check_type(dtype: MPI_Datatype, comm: MPI_Comm) -> i32 {
-    MPI_CHECK!(
+    MPI_CHECK_RET!(
         dtype == MPI_BYTE || dtype == MPI_INT || dtype == MPI_DOUBLE,
         comm,
         MPI_ERR_TYPE

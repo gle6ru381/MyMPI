@@ -238,6 +238,16 @@ impl Context {
     }
 
     #[inline(always)]
+    pub fn comm_size(comm: i32) -> i32 {
+        unsafe {CONTEXT.comm_group.comm_size(comm)}
+    }
+
+    #[inline(always)]
+    pub fn comm_rank(comm: i32) -> i32 {
+        unsafe {CONTEXT.comm_group.comm_rank(comm)}
+    }
+
+    #[inline(always)]
     pub fn is_init() -> bool {
         unsafe { CONTEXT.mpi_init }
     }

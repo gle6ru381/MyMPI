@@ -1,0 +1,10 @@
+[package]
+name = "c_bind"
+version = "0.2.0"
+edition = "2021"
+
+[lib]
+path = "lib.rs"
+
+[build-dependencies]
+cmake = "0.1"

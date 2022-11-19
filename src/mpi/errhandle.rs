@@ -15,11 +15,9 @@ pub struct HandlerContext {
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK {
     ($exp:expr, $comm:expr, $code:expr) => {
-        if $exp {
-            MPI_SUCCESS
-        } else {
-            debug!("Chech failed");
-            Context::err_handler().call($comm, $code)
+        if !$exp {
+            debug!("Check failed");
+            Context::err_handler().call($comm, $code);
         }
     };
 }
@@ -27,8 +25,22 @@ macro_rules! MPI_CHECK {
 #[macro_export]
 #[cfg(not(debug_assertions))]
 macro_rules! MPI_CHECK {
-    ($expr:expr, $comm:expr, $code:expr) => {
-        MPI_SUCCESS
+    ($expr:expr, $comm:expr, $code:expr) => {};
+}
+
+#[macro_export]
+macro_rules! MPI_CHECK_RET {
+    ($exp:expr, $comm:expr, $code:expr) => {
+        if cfg!(debug_assertions) {
+            if $exp {
+                MPI_SUCCESS
+            } else {
+                debug!("Check failed");
+                Context::err_handler().call($comm, $code)
+            }
+        } else {
+            MPI_SUCCESS
+        }
     };
 }
 
@@ -36,15 +48,24 @@ macro_rules! MPI_CHECK {
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_COMM {
     ($comm:expr) => {
-        Context::comm().check($comm)
+        Context::comm().check($comm);
     };
 }
 
 #[macro_export]
 #[cfg(not(debug_assertions))]
 macro_rules! MPI_CHECK_COMM {
+    ($comm:expr) => {};
+}
+
+#[macro_export]
+macro_rules! MPI_CHECK_COMM_RET {
     ($comm:expr) => {
-        MPI_SUCCESS
+        if cfg!(debug_assertions) {
+            Context::comm().check($comm)
+        } else {
+            MPI_SUCCESS
+        }
     };
 }
 
@@ -82,7 +103,7 @@ macro_rules! MPI_CHECK_RANK {
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_TYPE {
     ($dtype:expr, $comm:expr) => {
-        p_mpi_check_type($dtype, $comm)
+        p_mpi_check_type($dtype, $comm);
     };
 }
 
@@ -90,7 +111,6 @@ macro_rules! MPI_CHECK_TYPE {
 #[cfg(not(debug_assertions))]
 macro_rules! MPI_CHECK_TYPE {
     ($dtype:expr, $comm:expr) => {
-        MPI_SUCCESS
     };
 }
 
@@ -98,7 +118,7 @@ macro_rules! MPI_CHECK_TYPE {
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_OP {
     ($op:expr, $comm:expr) => {
-        p_mpi_check_op($op, $comm)
+        p_mpi_check_op($op, $comm);
     };
 }
 
@@ -106,7 +126,6 @@ macro_rules! MPI_CHECK_OP {
 #[cfg(not(debug_assertions))]
 macro_rules! MPI_CHECK_OP {
     ($op:expr, $comm:expr) => {
-        MPI_SUCCESS
     };
 }
 
@@ -150,7 +169,7 @@ impl HandlerContext {
     }
 
     pub fn check(comm: MPI_Comm, errh: MPI_Errhandler) -> i32 {
-        MPI_CHECK!(errh >= 0 && errh < ERRH_MAX as i32, comm, MPI_ERR_ARG)
+        MPI_CHECK_RET!(errh >= 0 && errh < ERRH_MAX as i32, comm, MPI_ERR_ARG)
     }
 
     pub fn call(&self, comm: MPI_Comm, code: MPI_Errhandler) -> i32 {

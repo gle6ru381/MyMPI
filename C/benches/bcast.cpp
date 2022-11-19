@@ -2,15 +2,15 @@
 #include <cassert>
 #include <chrono>
 #include <iostream>
-#include <stdlib.h>
-#include <vector>
 #include <memory>
 #include <mpi.h>
+#include <stdlib.h>
 #include <string>
+#include <vector>
 
 #define CSV_SEP " , "
 
-#include "bench_template.h"
+#include <bench_template.h>
 
 int main(int argc, char** argv)
 {
@@ -21,6 +21,12 @@ int main(int argc, char** argv)
         fileName = "memcpy.csv";
     }
 
-    auto bcast = std::bind(MPI_Bcast, std::placeholders::_1, std::placeholders::_2, MPI_BYTE, 0, MPI_COMM_WORLD);
+    auto bcast = std::bind(
+            MPI_Bcast,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            MPI_BYTE,
+            0,
+            MPI_COMM_WORLD);
     collective_bench(fileName, bcast);
 }

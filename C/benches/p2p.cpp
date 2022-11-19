@@ -37,26 +37,28 @@ int main(int argc, char** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    constexpr int vec_sizes[] = {125952,
-                                 204800,
-                                 256000,
-                                 458752,
-                                 921600,
-                                 1572864,
-                                 3932160,
-                                 6291456,
-                                 13631488,
-                                 24641536};
-    constexpr int msg_sizes[] = {125952,
-                                 204800,
-                                 256000,
-                                 458752,
-                                 921600,
-                                 1572864,
-                                 3932160,
-                                 6291456,
-                                 13631488,
-                                 24641536};
+    constexpr int vec_sizes[]
+            = {125952,
+               204800,
+               256000,
+               458752,
+               921600,
+               1572864,
+               3932160,
+               6291456,
+               13631488,
+               24641536};
+    constexpr int msg_sizes[]
+            = {125952,
+               204800,
+               256000,
+               458752,
+               921600,
+               1572864,
+               3932160,
+               6291456,
+               13631488,
+               24641536};
 
     constexpr int nsamples = 20;
     std::array<long, nsamples> fAccess;
