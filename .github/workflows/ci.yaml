@@ -31,7 +31,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         name: Build release
         with:
-          command: build --release
+          command: build
+          args: --release
 
       - uses: actions-rs/cargo@v1
         name: Build with minimal features
