@@ -37,11 +37,31 @@ macro_rules! bench_nt {
 fn main() {
     let _ = create_dir("C/output");
 
-    bench!("bench_bcast", "bcast_4_.csv", "collective", 4);
-    bench_nt!("bench_bcast", "ntbcast_4_.csv", "collective", 4);
-    bench!("bench_bcast", "bcast_8_.csv", "collective", 8);
-    bench_nt!("bench_bcast", "ntbcast_8_.csv", "collective", 8);
+    bench!("bcast", "bcast_4_.csv", "collective", 4);
+    bench_nt!("bcast", "ntbcast_4_.csv", "collective", 4);
+    bench!("bcast", "bcast_8_.csv", "collective", 8);
+    bench_nt!("bcast", "ntbcast_8_.csv", "collective", 8);
 
-    bench!("bench_p2p", "p2p.csv", "p2p", 2);
-    bench_nt!("bench_p2p", "ntp2p.csv", "p2p", 2);
+    bench!("p2p", "p2p.csv", "p2p", 2);
+    bench_nt!("p2p", "ntp2p.csv", "p2p", 2);
+
+    bench!("gather", "gather_4_.csv", "collective", 4);
+    bench_nt!("gather", "ntgather_4_.csv", "collective", 4);
+    bench!("gather", "gather_8_.csv", "collective", 8);
+    bench_nt!("gather", "ntgather_8_.csv", "collective", 8);
+
+    bench!("allgather", "allgather_4_.csv", "collective", 4);
+    bench_nt!("allgather", "ntallgather_4_.csv", "collective", 4);
+    bench!("allgather", "allgather_8_.csv", "collective", 8);
+    bench_nt!("allgather", "ntallgather_8_.csv", "collective", 8);
+
+    bench!("allreduce", "allreduce_4_.csv", "collective", 4);
+    bench_nt!("allreduce", "ntallreduce_4_.csv", "collective", 4);
+    bench!("allreduce", "allreduce_8_.csv", "collective", 8);
+    bench_nt!("allreduce", "ntallreduce_8_.csv", "collective", 8);
+
+    bench!("reduce", "reduce_4_.csv", "collective", 4);
+    bench_nt!("reduce", "ntreduce_4_.csv", "collective", 4);
+    bench!("reduce", "reduce_8_.csv", "collective", 8);
+    bench_nt!("reduce", "ntreduce_8_.csv", "collective", 8);
 }
