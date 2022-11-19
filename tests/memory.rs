@@ -37,34 +37,6 @@ macro_rules! test_cpy {
     };
 }
 
-macro_rules! test_aligned {
-    ($name:ident, $func:ident) => {
-        #[test]
-        fn $name() {
-            for size in [256, 512, 1024, 2048, 4096] {
-                let layout = Layout::from_size_align(size, 32).unwrap();
-                unsafe {
-                    let a = from_raw_parts_mut(alloc(layout) as *mut i32, size / 4);
-                    for (i, val) in a.iter_mut().enumerate() {
-                        *val = i as i32;
-                    }
-                    let b = from_raw_parts_mut(alloc(layout) as *mut i32, size / 4);
-                    $func(
-                        b.as_mut_ptr() as *mut c_void,
-                        a.as_ptr() as *const c_void,
-                        size,
-                    );
-                    for (i, val) in b.into_iter().enumerate() {
-                        assert_eq!(*val, i as i32, "Size: {}", size);
-                    }
-                    dealloc(a.as_mut_ptr() as *mut u8, layout);
-                    dealloc(b.as_mut_ptr() as *mut u8, layout);
-                }
-            }
-        }
-    };
-}
-
 #[cfg(target_feature = "sse2")]
 test_cpy!(sse2cpy_test, sse2_ntcpy);
 #[cfg(target_feature = "avx")]
