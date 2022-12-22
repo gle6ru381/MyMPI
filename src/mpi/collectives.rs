@@ -1,8 +1,8 @@
+use crate::{reducefuc::*, MPI_Sendrecv};
 use crate::{
-    private::*, types::*, MPI_Comm_call_errhandler, MPI_Comm_rank, MPI_Comm_size, MPI_Recv,
+    shared::*, types::*, MPI_Comm_call_errhandler, MPI_Comm_rank, MPI_Comm_size, MPI_Recv,
     MPI_Send, MPI_Type_size, MPI_CHECK, MPI_CHECK_OP, MPI_CHECK_TYPE,
 };
-use crate::{reducefuc::*, MPI_Sendrecv};
 use std::{alloc::alloc, alloc::dealloc, alloc::Layout, ffi::c_void};
 
 const BARRIER_TAG: i32 = 0;

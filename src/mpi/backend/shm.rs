@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
-use crate::memory::memcpy;
-use crate::private::*;
+use super::memory::memcpy;
+use crate::shared::*;
 use std::{
     mem::size_of,
     ptr::{null_mut, read_volatile, write_volatile},
@@ -267,7 +267,12 @@ impl ShmData {
 
         let mut unexp = false;
         if req.tag != pshm.recv_cell().tag as i32 {
-            debug!("{} Find unexpect", Context::rank());
+            debug!(
+                "Find unexpect message from rank: {}, {} != {}",
+                req.rank,
+                req.tag,
+                pshm.recv_cell().tag
+            );
             let preqx = d.unexp_queue.push();
             if preqx.is_some() {
                 let reqx = unsafe { preqx.unwrap_unchecked() };
@@ -297,7 +302,11 @@ impl ShmData {
             );
             req.buf = buf as *mut c_void;
         } else if req.cnt < pshm.recv_cell().len {
-            debug!("Truncate error for recv");
+            debug!(
+                "Truncate error for recv {} != {}",
+                req.cnt,
+                pshm.recv_cell().len
+            );
             return MPI_ERR_TRUNCATE;
         } else {
             req.cnt = pshm.recv_cell().len;

@@ -157,21 +157,24 @@ fn test_obj() {
     set_var("MPI_SIZE", "2");
 
     let mut obj = MpiObject::new();
-    //let size = MpiObject::size();
     let rank = MpiObject::rank();
+    let comm = obj.get_comm(MPI_COMM_WORLD).unwrap();
 
     if rank == 0 {
-        obj.send_raw(b"Hello world!!!\0", 1, 0, MPI_COMM_WORLD);
-        obj.send(&vec![1, 2, 3, 4, 5], 1, 1, MPI_COMM_WORLD);
-        let mut data: Data<i32> = obj.recv(5, 1, 10, MPI_COMM_WORLD).unwrap();
+        comm.send_slice(b"Hello world!!!\0", 1, 0).unwrap();
+        comm.send(&vec![1, 2, 3, 4, 5], 1, 1).unwrap();
+        let mut data: Data<i32> = Data::new(5);
+        comm.recv(&mut data, 1, 10).unwrap();
         assert_eq!(data.into_slice(), [5, 4, 3, 2, 1]);
     } else {
-        let data: Data<u8> = obj.recv(15, 0, 0, MPI_COMM_WORLD).unwrap();
+        let mut data: Data<u8> = Data::new(15);
+        comm.recv(&mut data, 0, 0).unwrap();
         let str = unsafe { CStr::from_ptr(data.raw() as *const i8).to_str().unwrap() };
         assert_eq!(str, "Hello world!!!");
-        let mut data: Data<i32> = obj.recv(5, 0, 1, MPI_COMM_WORLD).unwrap();
-        assert_eq!(data.into_slice(), [1, 2, 3, 4, 5]);
-        obj.send(&vec![5, 4, 3, 2, 1], 0, 10, MPI_COMM_WORLD);
+        let mut arr: Data<i32> = Data::new(5);
+        comm.recv(&mut arr, 0, 1).unwrap();
+        assert_eq!(arr.into_slice(), [1, 2, 3, 4, 5]);
+        comm.send(&vec![5, 4, 3, 2, 1], 0, 10).unwrap();
     }
 }
 
@@ -181,41 +184,56 @@ fn test_obj_async() {
 
     let mut obj = MpiObject::new();
     let rank = MpiObject::rank();
+    let comm = obj.get_comm(MPI_COMM_WORLD).unwrap();
 
     if rank == 0 {
-        let mut req = obj
-            .send_req_str("First String", 1, 5, MPI_COMM_WORLD)
-            .unwrap();
-        let mut req2 = obj
-            .send_req_raw(&[100, 52141, 7765, -1241], 1, 0, MPI_COMM_WORLD)
-            .unwrap();
-        obj.wait_all(&mut [req.request(), req2.request()]);
-        let mut req = obj.recv_req::<u8>(15, 1, 0, MPI_COMM_WORLD).unwrap();
-        let mut req2 = obj.recv_req::<i32>(8, 1, 5, MPI_COMM_WORLD).unwrap();
-        let val = String::from_utf8_lossy(req.data());
-        assert_eq!(val, "Hello world!!!!");
+        let mut p1 = comm.send_str("First String", 1, 5).unwrap();
+        let mut p2 = comm.send_slice(&[100, 52141, 7765, -1241], 1, 0).unwrap();
+        p1.wait().unwrap();
+        p2.wait().unwrap();
+        drop(p1);
+        drop(p2);
+
+        let mut d: Data<u8> = Data::new(15);
+        let mut p3 = comm.recv(&mut d, 1, 0).unwrap();
+        let mut d2: Data<i32> = Data::new(8);
+        let mut p4 = comm.recv(&mut d2, 1, 5).unwrap();
+
+        p3.wait().unwrap();
+        p4.wait().unwrap();
+        drop(p3);
+        drop(p4);
+
+        let val = d.into_slice();
+        assert_eq!(val, "Hello world!!!\0".as_bytes());
         assert_eq!(
-            req2.data(),
+            d2.into_slice(),
             [-110, 0, 2412, 66654, 41241, 586764, -24124, 4241]
         );
     } else {
-        let mut req = obj.recv_req::<i32>(4, 0, 0, MPI_COMM_WORLD).unwrap();
-        let mut req2 = obj.recv_str(12, 0, 5, MPI_COMM_WORLD).unwrap();
-        assert_eq!(req.data(), [100, 52141, 7765, -1241]);
-        let val = String::from_utf8_lossy(req2.into_slice());
+        let mut d: Data<i32> = Data::new(4);
+        let mut p1 = comm.recv(&mut d, 0, 0).unwrap();
+        let mut d2: Data<u8> = Data::new(12);
+        let mut p2 = comm.recv(&mut d2, 0, 5).unwrap();
+
+        p1.wait().unwrap();
+        p2.wait().unwrap();
+        drop(p1);
+        drop(p2);
+
+        assert_eq!(d.into_slice_mut(), [100, 52141, 7765, -1241]);
+        let val = String::from_utf8_lossy(d2.into_slice());
         assert_eq!(val, "First String");
-        let mut req = obj
-            .send_req_raw(
-                &[-110, 0, 2412, 66654, 41241, 586764, -24124, 4241],
-                0,
-                5,
-                MPI_COMM_WORLD,
-            )
+
+        let mut p3 = comm
+            .send_slice(&[-110, 0, 2412, 66654, 41241, 586764, -24124, 4241], 0, 5)
             .unwrap();
-        let mut req2 = obj
-            .send_req_str("Hello world!!!!", 0, 0, MPI_COMM_WORLD)
-            .unwrap();
-        obj.wait_all(&mut [req.request(), req2.request()]);
+        let mut p4 = comm.send_str("Hello world!!!", 0, 0).unwrap();
+
+        p3.wait().unwrap();
+        p4.wait().unwrap();
+        drop(p3);
+        drop(p4);
     }
 }
 

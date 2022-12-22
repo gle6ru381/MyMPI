@@ -1,50 +1,9 @@
 use crate::context::Context;
-use crate::{private::*, MPI_CHECK};
+use crate::object::types::Typed;
+use crate::{shared::*, MPI_CHECK};
 use std::ffi::c_void;
-use std::ops::{Deref, DerefMut};
 use std::ptr::null_mut;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
-
-pub struct Buffer {
-    buf: *mut c_void,
-    cnt: i32,
-    dtype: MPI_Datatype,
-    rank: i32,
-    tag: i32,
-    comm: MPI_Comm,
-}
-
-pub trait Typed {
-    const ALIGN: usize = 32;
-    fn into_mpi() -> i32;
-}
-
-impl Typed for i32 {
-    const ALIGN: usize = 32;
-    fn into_mpi() -> i32 {
-        MPI_INT
-    }
-}
-
-impl Typed for i8 {
-    fn into_mpi() -> i32 {
-        MPI_BYTE
-    }
-}
-
-impl Typed for u8 {
-    const ALIGN: usize = 32;
-    fn into_mpi() -> i32 {
-        MPI_BYTE
-    }
-}
-
-impl Typed for f64 {
-    const ALIGN: usize = 32;
-    fn into_mpi() -> i32 {
-        MPI_DOUBLE
-    }
-}
 
 impl P_MPI_Request {
     pub fn test(preq: &mut MPI_Request, pflag: &mut i32, pstat: *mut MPI_Status) -> i32 {
@@ -74,7 +33,6 @@ impl P_MPI_Request {
 
     pub fn wait(preq: &mut MPI_Request, pstat: *mut MPI_Status) -> i32 {
         let mut flag = 0;
-        debug!("Call wait");
         while flag == 0 {
             let code = Self::test(preq, &mut flag, pstat);
             if code != MPI_SUCCESS {
@@ -114,230 +72,114 @@ impl P_MPI_Request {
     }
 }
 
-impl Buffer {
-    fn to_request(&self, flag: i32) -> P_MPI_Request {
-        P_MPI_Request {
-            buf: self.buf,
+pub(crate) fn send<T: Typed>(
+    buf: &[T],
+    rank: i32,
+    tag: i32,
+    comm: MPI_Comm,
+    req: &mut MPI_Request,
+) -> i32 {
+    let dest = Context::comm().rank_map(comm, rank);
+
+    MPI_CHECK!(dest != Context::rank(), comm, MPI_ERR_INTERN);
+    MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG);
+
+    let tag = Context::comm().tag_map(comm, tag);
+    debug!("Send call to {dest} with tag {tag}");
+
+    let code = Context::progress();
+    if code != MPI_SUCCESS {
+        return Context::err_handler().call(comm, code);
+    }
+
+    let new_req = Context::shm().get_send();
+    if let Some(r) = new_req {
+        *req = r;
+        unsafe {
+            **req = P_MPI_Request {
+                buf: buf.as_ptr() as *mut T as *mut c_void,
+                stat: MPI_Status::new(),
+                comm,
+                flag: 0,
+                tag,
+                cnt: buf.len() as i32 * p_mpi_type_size(T::into_mpi()),
+                rank: dest,
+            }
+        };
+    } else {
+        *req = null_mut();
+        Context::err_handler().call(comm, MPI_ERR_INTERN);
+        return MPI_ERR_INTERN;
+    }
+    MPI_SUCCESS
+}
+
+pub(crate) fn recv<T: Typed>(
+    buf: &mut [T],
+    rank: i32,
+    tag: i32,
+    comm: MPI_Comm,
+    req: &mut MPI_Request,
+) -> i32 {
+    let src = Context::comm().rank_map(comm, rank);
+
+    MPI_CHECK!(rank != Context::rank(), comm, MPI_ERR_INTERN);
+    MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_INTERN);
+
+    let tag = Context::comm().tag_map(comm, tag);
+    debug!("Recv call from {src} with tag {tag}");
+
+    let code = Context::progress();
+    if code != MPI_SUCCESS {
+        return Context::err_handler().call(comm, code);
+    }
+
+    *req = Context::shm().find_unexp(src, tag);
+    if !(*req).is_null() {
+        let rreq = unsafe { &mut **req };
+        debug!("Unexpected rank: {}, tag: {}", rreq.rank, rreq.tag);
+        if rreq.cnt > buf.len() as i32 * T::into_mpi() {
+            debug!("Error truncate unexpect");
+            return Context::err_handler().call(comm, MPI_ERR_TRUNCATE);
+        }
+
+        unsafe {
+            (buf.as_mut_ptr() as *mut c_void).copy_from(rreq.buf, rreq.cnt as usize);
+            let layout = std::alloc::Layout::from_size_align_unchecked(rreq.cnt as usize, 1);
+            std::alloc::dealloc(rreq.buf as *mut u8, layout);
+        }
+        *rreq = P_MPI_Request {
+            buf: buf.as_ptr() as *mut T as *mut c_void,
             stat: MPI_Status::new(),
-            comm: self.comm,
-            flag,
-            tag: Context::comm().tag_map(self.comm, self.tag),
-            cnt: self.bytes(),
-            rank: Context::comm().rank_map(self.comm, self.rank),
-        }
-    }
-
-    pub const fn new() -> Self {
-        Buffer {
-            buf: null_mut(),
-            cnt: 0,
-            dtype: 0,
-            rank: 0,
-            tag: 0,
-            comm: 0,
-        }
-    }
-
-    pub const fn from_type<'a, T: Typed>(data: &'a [T], dtype: i32) -> Self {
-        Buffer {
-            buf: data.as_ptr() as *mut c_void,
-            cnt: data.len() as i32,
-            dtype,
-            rank: 0,
-            tag: 0,
-            comm: 0,
-        }
-    }
-
-    pub fn from_type_mut<'a, T: Typed>(data: &'a mut [T], dtype: i32) -> Self {
-        Buffer {
-            buf: data.as_ptr() as *mut c_void,
-            cnt: data.len() as i32,
-            dtype,
-            rank: 0,
-            tag: 0,
-            comm: 0,
-        }
-    }
-
-    #[must_use]
-    pub fn from<'a, T: Typed>(data: &'a [T]) -> Self {
-        Buffer {
-            buf: data.as_ptr() as *mut c_void,
-            cnt: data.len() as i32,
-            dtype: T::into_mpi(),
-            rank: 0,
-            tag: 0,
-            comm: 0,
-        }
-    }
-
-    #[must_use]
-    pub fn from_mut<'a, T: Typed>(data: &'a mut [T]) -> Self {
-        Buffer {
-            buf: data.as_mut_ptr() as *mut c_void,
-            cnt: data.len() as i32,
-            dtype: T::into_mpi(),
-            rank: 0,
-            tag: 0,
-            comm: 0,
-        }
-    }
-
-    #[must_use]
-    pub fn set_data<'a, D: Typed, T: Deref<Target = [D]>>(self, data: &'a T) -> Self {
-        self.set_data_raw(data.deref())
-    }
-
-    #[must_use]
-    pub fn set_data_mut<'a, D: Typed, T: DerefMut<Target = [D]>>(self, data: &'a mut T) -> Self {
-        self.set_data_raw_mut(&mut data.deref_mut())
-    }
-
-    #[must_use]
-    pub fn set_data_raw<'a, T: Typed>(mut self, data: &'a [T]) -> Self {
-        self.buf = data.as_ptr() as *mut c_void;
-        self.dtype = T::into_mpi();
-        self.cnt = data.len() as i32;
-        self
-    }
-
-    #[must_use]
-    pub fn set_data_raw_mut<'a, T: Typed>(mut self, data: &'a mut [T]) -> Self {
-        self.buf = data.as_mut_ptr() as *mut c_void;
-        self.dtype = T::into_mpi();
-        self.cnt = data.len() as i32;
-        self
-    }
-
-    #[must_use]
-    pub fn set_rank(mut self, rank: i32) -> Self {
-        self.rank = rank;
-        self
-    }
-
-    #[must_use]
-    pub fn set_tag(mut self, tag: i32) -> Self {
-        self.tag = tag;
-        self
-    }
-
-    #[must_use]
-    pub fn set_comm(mut self, comm: MPI_Comm) -> Self {
-        self.comm = comm;
-        self
-    }
-
-    pub fn data<'a, T: Typed>(&'a self) -> &'a [T] {
-        debug_assert_eq!(T::into_mpi(), self.dtype);
-        debug!("Get data: {:X}", self.buf as usize);
-        unsafe { from_raw_parts(self.buf as *const T, self.cnt as usize) }
-    }
-
-    pub unsafe fn data_mut_unchecked<'a, T: Typed>(&'a mut self, size: usize) -> &'a mut [T] {
-        from_raw_parts_mut(self.buf as *mut T, size as usize)
-    }
-
-    pub fn data_mut<'a, T: Typed>(&'a mut self, size: usize) -> &'a mut [T] {
-        debug_assert_eq!(T::into_mpi(), self.dtype);
-        debug_assert!(size < self.bytes() as usize);
-        unsafe { self.data_mut_unchecked(size) }
-    }
-
-    pub fn rank(&self) -> i32 {
-        self.rank
-    }
-
-    pub fn tag(&self) -> i32 {
-        self.tag
-    }
-
-    pub fn comm(&self) -> MPI_Comm {
-        self.comm
-    }
-
-    pub fn bytes(&self) -> i32 {
-        self.cnt * p_mpi_type_size(self.dtype)
-    }
-
-    #[allow(unused_variables)]
-    pub fn send(&self, req: &mut MPI_Request) -> i32 {
-        let dest = Context::comm().rank_map(self.comm, self.rank);
-
-        MPI_CHECK!(dest != Context::rank(), self.comm, MPI_ERR_INTERN);
-        MPI_CHECK!(self.tag >= 0 && self.tag <= 32767, self.comm, MPI_ERR_TAG);
-
-        let tag = Context::comm().tag_map(self.comm, self.tag);
-        debug!("Send call to {dest} with tag {tag}");
-
-        let code = Context::progress();
-        if code != MPI_SUCCESS {
-            return Context::err_handler().call(self.comm, code);
-        }
-
-        let new_req = Context::shm().get_send();
-        if new_req.is_some() {
-            *req = unsafe { new_req.unwrap_unchecked() };
+            comm,
+            flag: 1,
+            tag,
+            cnt: buf.len() as i32 * p_mpi_type_size(T::into_mpi()),
+            rank: src,
+        };
+        return MPI_SUCCESS;
+    } else {
+        debug!("Generate new request");
+        let rreq = Context::shm().get_recv();
+        if let Some(r) = rreq {
+            *req = r;
             unsafe {
-                (**req) = self.to_request(0);
+                **req = P_MPI_Request {
+                    buf: buf.as_ptr() as *mut T as *mut c_void,
+                    stat: MPI_Status::new(),
+                    comm,
+                    flag: 0,
+                    tag,
+                    cnt: buf.len() as i32 * p_mpi_type_size(T::into_mpi()),
+                    rank: src,
+                };
             }
             return MPI_SUCCESS;
         } else {
             *req = null_mut();
+            Context::err_handler().call(comm, MPI_ERR_INTERN);
+            return MPI_ERR_INTERN;
         }
-        Context::err_handler().call(self.comm, MPI_ERR_INTERN)
-    }
-
-    pub fn recv(&self, req: &mut MPI_Request) -> i32 {
-        let src = Context::comm().rank_map(self.comm, self.rank);
-
-        MPI_CHECK!(self.rank != Context::rank(), self.comm, MPI_ERR_INTERN);
-        MPI_CHECK!(
-            self.tag >= 0 && self.tag <= 32767,
-            self.comm,
-            MPI_ERR_INTERN
-        );
-
-        let tag = Context::comm().tag_map(self.comm, self.tag);
-
-        debug!("Recv call from {src} with tag {tag}");
-
-        let code = Context::progress();
-        if code != MPI_SUCCESS {
-            return Context::err_handler().call(self.comm, code);
-        }
-
-        *req = Context::shm().find_unexp(src, tag);
-        if !(*req).is_null() {
-            let rreq = unsafe { &mut **req };
-            debug!("Unexprect rank: {}, tag: {}", rreq.rank, rreq.tag);
-            if rreq.cnt > self.bytes() {
-                debug!("Error truncate unexpect");
-                return Context::err_handler().call(self.comm, MPI_ERR_TRUNCATE);
-            }
-
-            unsafe {
-                self.buf.copy_from(rreq.buf, rreq.cnt as usize);
-                let layout = std::alloc::Layout::from_size_align_unchecked(rreq.cnt as usize, 1);
-                std::alloc::dealloc(rreq.buf as *mut u8, layout);
-            }
-            *rreq = self.to_request(1);
-            return MPI_SUCCESS;
-        } else {
-            debug!("Generate new request");
-            let rreq = Context::shm().get_recv();
-            if rreq.is_some() {
-                unsafe {
-                    *req = rreq.unwrap_unchecked();
-                    **req = self.to_request(0);
-                }
-                return MPI_SUCCESS;
-            } else {
-                *req = null_mut();
-            }
-        }
-
-        Context::err_handler().call(self.comm, MPI_ERR_INTERN)
     }
 }
 
@@ -428,15 +270,16 @@ pub extern "C" fn MPI_Isend(
     comm: MPI_Comm,
     preq: *mut MPI_Request,
 ) -> i32 {
-    Buffer {
-        buf: buf as *mut c_void,
-        cnt,
-        dtype,
-        rank: dest,
-        tag,
-        comm,
+    let dataLen = p_mpi_type_size(dtype) * cnt;
+    unsafe {
+        send(
+            from_raw_parts(buf as *const u8, dataLen as usize),
+            dest,
+            tag,
+            comm,
+            &mut *preq,
+        )
     }
-    .send(unsafe { &mut *preq })
 }
 
 #[no_mangle]
@@ -449,15 +292,16 @@ pub extern "C" fn MPI_Irecv(
     comm: MPI_Comm,
     preq: *mut MPI_Request,
 ) -> i32 {
-    Buffer {
-        buf,
-        cnt,
-        dtype,
-        rank: src,
-        tag,
-        comm,
+    let dataLen = p_mpi_type_size(dtype) * cnt;
+    unsafe {
+        recv(
+            from_raw_parts_mut(buf as *mut u8, dataLen as usize),
+            src,
+            tag,
+            comm,
+            &mut *preq,
+        )
     }
-    .recv(unsafe { &mut *preq })
 }
 
 #[no_mangle]

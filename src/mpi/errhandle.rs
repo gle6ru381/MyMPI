@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use crate::context::Context;
-use crate::{cstr, p_mpi_abort, private::*, types::*};
+use crate::{cstr, p_mpi_abort, shared::*, types::*};
 use zstr::zstr;
 
 type ErrHandler = fn(MPI_Comm, i32);

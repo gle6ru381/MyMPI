@@ -1,4 +1,4 @@
-use crate::private::*;
+use crate::shared::*;
 use std::ptr::NonNull;
 
 pub struct Queue<T, const N: usize> {
