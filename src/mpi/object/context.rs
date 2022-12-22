@@ -1,0 +1,94 @@
+use super::types::Promise;
+use super::types::Typed;
+use crate::context::Context;
+use crate::shared::*;
+use crate::xfer::{recv, send};
+use std::ops::Deref;
+use std::ops::DerefMut;
+use std::ptr::null_mut;
+
+pub struct MpiObject {}
+
+pub struct Communicator {
+    comm_id: MPI_Comm,
+}
+
+impl Drop for MpiObject {
+    fn drop(&mut self) {
+        Context::deinit();
+    }
+}
+
+impl MpiObject {
+    pub fn new() -> MpiObject {
+        Context::init(null_mut(), null_mut());
+        MpiObject {}
+    }
+
+    pub fn rank() -> i32 {
+        Context::rank()
+    }
+
+    pub fn get_comm(&mut self, comm_id: MPI_Comm) -> Result<Communicator, i32> {
+        let err = Context::comm().check(comm_id);
+        if err == MPI_SUCCESS {
+            Ok(Communicator { comm_id })
+        } else {
+            Err(err)
+        }
+    }
+}
+
+impl Communicator {
+    pub fn send_slice<'a, T: Typed>(
+        &self,
+        buf: &'a [T],
+        rank: i32,
+        tag: i32,
+    ) -> Result<Promise<'a, T>, i32> {
+        let mut req: MPI_Request = uninit();
+        let err = send(buf, rank, tag, self.comm_id, &mut req);
+        if err == MPI_SUCCESS {
+            Ok(Promise::new(req))
+        } else {
+            Err(err)
+        }
+    }
+
+    pub fn recv_slice<'a, T: Typed>(
+        &self,
+        buf: &'a mut [T],
+        rank: i32,
+        tag: i32,
+    ) -> Result<Promise<'a, T>, i32> {
+        let mut req: MPI_Request = uninit();
+        let err = recv(buf, rank, tag, self.comm_id, &mut req);
+        if err == MPI_SUCCESS {
+            Ok(Promise::new(req))
+        } else {
+            Err(err)
+        }
+    }
+
+    pub fn send<'a, T: Typed, A: Deref<Target = [T]>>(
+        &self,
+        buff: &'a A,
+        rank: i32,
+        tag: i32,
+    ) -> Result<Promise<'a, T>, i32> {
+        self.send_slice(buff.deref(), rank, tag)
+    }
+
+    pub fn recv<'a, T: Typed, A: DerefMut<Target = [T]>>(
+        &self,
+        buff: &'a mut A,
+        rank: i32,
+        tag: i32,
+    ) -> Result<Promise<'a, T>, i32> {
+        self.recv_slice(buff.deref_mut(), rank, tag)
+    }
+
+    pub fn send_str<'a>(&self, buff: &'a str, rank: i32, tag: i32) -> Result<Promise<'a, u8>, i32> {
+        self.send_slice(buff.as_bytes(), rank, tag)
+    }
+}

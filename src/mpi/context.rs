@@ -1,5 +1,5 @@
-pub use crate::private::*;
-use crate::shm::ShmData;
+use crate::backend::shm::ShmData;
+pub use crate::shared::*;
 pub use crate::types::*;
 use crate::{comm::CommGroup, MPI_Barrier};
 use crate::{debug, HandlerContext};

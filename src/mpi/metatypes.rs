@@ -1,4 +1,4 @@
-use crate::{private::*, types::*, MPI_CHECK, MPI_CHECK_TYPE};
+use crate::{shared::*, types::*, MPI_CHECK, MPI_CHECK_TYPE};
 
 pub(crate) fn p_mpi_check_type(dtype: MPI_Datatype, comm: MPI_Comm) -> i32 {
     MPI_CHECK_RET!(

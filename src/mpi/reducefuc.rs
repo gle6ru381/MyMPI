@@ -4,7 +4,7 @@ use std::{
     slice::{from_raw_parts, from_raw_parts_mut},
 };
 
-use crate::private::*;
+use crate::shared::*;
 
 fn sum_proc<T>(src: *const T, dst: *mut T, len: usize)
 where
