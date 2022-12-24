@@ -1,12 +1,21 @@
 use crate::context::Context;
 use crate::object::types::Typed;
-use crate::{shared::*, MPI_CHECK};
+use crate::{shared::*, debug_xfer, MPI_CHECK};
+use crate::debug::DbgEntryExit;
 use std::ffi::c_void;
 use std::ptr::null_mut;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
+macro_rules! DbgEnEx {
+    ($name:literal) => {
+        let _dbgEntryExit = DbgEntryExit::new(|s| debug_xfer!($name, "{s}"));
+    };
+}
+
 impl P_MPI_Request {
     pub fn test(preq: &mut MPI_Request, pflag: &mut i32, pstat: *mut MPI_Status) -> i32 {
+        DbgEnEx!("Test");
+
         let code = Context::progress();
         if code != MPI_SUCCESS {
             return Context::err_handler().call(MPI_COMM_WORLD, code);
@@ -15,7 +24,7 @@ impl P_MPI_Request {
         if !(*preq).is_null() {
             let req = unsafe { &mut **preq };
             if req.flag != 0 {
-                debug!("Find request with tag: {}, rank: {}", req.tag, req.rank);
+                debug_xfer!("Test", "Find request with tag: {}, rank: {}", req.tag, req.rank);
                 *pflag = 1;
 
                 if !pstat.is_null() {
@@ -32,6 +41,7 @@ impl P_MPI_Request {
     }
 
     pub fn wait(preq: &mut MPI_Request, pstat: *mut MPI_Status) -> i32 {
+        DbgEnEx!("Wait");
         let mut flag = 0;
         while flag == 0 {
             let code = Self::test(preq, &mut flag, pstat);
@@ -43,8 +53,8 @@ impl P_MPI_Request {
     }
 
     pub fn wait_all(reqs: &mut [MPI_Request], pstat: &mut [MPI_Status]) -> i32 {
+        DbgEnEx!("WaitAll");
         debug_assert!(reqs.len() == pstat.len());
-        debug!("Wait all, size: {}", reqs.len());
 
         for i in pstat.iter_mut() {
             i.MPI_ERROR = MPI_ERR_PENDING;
@@ -79,13 +89,15 @@ pub(crate) fn send<T: Typed>(
     comm: MPI_Comm,
     req: &mut MPI_Request,
 ) -> i32 {
+    DbgEnEx!("Send");
+
     let dest = Context::comm().rank_map(comm, rank);
 
     MPI_CHECK!(dest != Context::rank(), comm, MPI_ERR_INTERN);
     MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG);
 
     let tag = Context::comm().tag_map(comm, tag);
-    debug!("Send call to {dest} with tag {tag}");
+    debug_xfer!("Send", "Send call to {dest} with tag {tag}");
 
     let code = Context::progress();
     if code != MPI_SUCCESS {
@@ -121,13 +133,15 @@ pub(crate) fn recv<T: Typed>(
     comm: MPI_Comm,
     req: &mut MPI_Request,
 ) -> i32 {
+    DbgEnEx!("Recv");
+
     let src = Context::comm().rank_map(comm, rank);
 
     MPI_CHECK!(rank != Context::rank(), comm, MPI_ERR_INTERN);
     MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_INTERN);
 
     let tag = Context::comm().tag_map(comm, tag);
-    debug!("Recv call from {src} with tag {tag}");
+    debug_xfer!("Recv", "Recv call from {src} with tag {tag}");
 
     let code = Context::progress();
     if code != MPI_SUCCESS {
@@ -137,9 +151,9 @@ pub(crate) fn recv<T: Typed>(
     *req = Context::shm().find_unexp(src, tag);
     if !(*req).is_null() {
         let rreq = unsafe { &mut **req };
-        debug!("Unexpected rank: {}, tag: {}", rreq.rank, rreq.tag);
+        debug_xfer!("Recv", "Unexpected rank: {}, tag: {}", rreq.rank, rreq.tag);
         if rreq.cnt > buf.len() as i32 * T::into_mpi() {
-            debug!("Error truncate unexpect");
+            debug_xfer!("Recv", "Error truncate for unexpected data");
             return Context::err_handler().call(comm, MPI_ERR_TRUNCATE);
         }
 
@@ -159,7 +173,7 @@ pub(crate) fn recv<T: Typed>(
         };
         return MPI_SUCCESS;
     } else {
-        debug!("Generate new request");
+        debug_xfer!("Recv", "Create new request");
         let rreq = Context::shm().get_recv();
         if let Some(r) = rreq {
             *req = r;

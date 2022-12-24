@@ -187,22 +187,18 @@ fn test_obj_async() {
     let comm = obj.get_comm(MPI_COMM_WORLD).unwrap();
 
     if rank == 0 {
-        let mut p1 = comm.send_str("First String", 1, 5).unwrap();
-        let mut p2 = comm.send_slice(&[100, 52141, 7765, -1241], 1, 0).unwrap();
+        let p1 = comm.send_str("First String", 1, 5).unwrap();
+        let p2 = comm.send_slice(&[100, 52141, 7765, -1241], 1, 0).unwrap();
         p1.wait().unwrap();
         p2.wait().unwrap();
-        drop(p1);
-        drop(p2);
 
         let mut d: Data<u8> = Data::new(15);
-        let mut p3 = comm.recv(&mut d, 1, 0).unwrap();
+        let p3 = comm.recv(&mut d, 1, 0).unwrap();
         let mut d2: Data<i32> = Data::new(8);
-        let mut p4 = comm.recv(&mut d2, 1, 5).unwrap();
+        let p4 = comm.recv(&mut d2, 1, 5).unwrap();
 
         p3.wait().unwrap();
         p4.wait().unwrap();
-        drop(p3);
-        drop(p4);
 
         let val = d.into_slice();
         assert_eq!(val, "Hello world!!!\0".as_bytes());
@@ -212,28 +208,24 @@ fn test_obj_async() {
         );
     } else {
         let mut d: Data<i32> = Data::new(4);
-        let mut p1 = comm.recv(&mut d, 0, 0).unwrap();
+        let p1 = comm.recv(&mut d, 0, 0).unwrap();
         let mut d2: Data<u8> = Data::new(12);
-        let mut p2 = comm.recv(&mut d2, 0, 5).unwrap();
+        let p2 = comm.recv(&mut d2, 0, 5).unwrap();
 
         p1.wait().unwrap();
         p2.wait().unwrap();
-        drop(p1);
-        drop(p2);
 
         assert_eq!(d.into_slice_mut(), [100, 52141, 7765, -1241]);
         let val = String::from_utf8_lossy(d2.into_slice());
         assert_eq!(val, "First String");
 
-        let mut p3 = comm
+        let p3 = comm
             .send_slice(&[-110, 0, 2412, 66654, 41241, 586764, -24124, 4241], 0, 5)
             .unwrap();
-        let mut p4 = comm.send_str("Hello world!!!", 0, 0).unwrap();
+        let p4 = comm.send_str("Hello world!!!", 0, 0).unwrap();
 
         p3.wait().unwrap();
         p4.wait().unwrap();
-        drop(p3);
-        drop(p4);
     }
 }
 

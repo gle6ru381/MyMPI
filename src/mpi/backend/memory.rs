@@ -817,13 +817,17 @@ pub fn avx512_cpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
     }
 }
 
+use crate::{shared::*, debug_bkd};
+
 pub fn memcpy(dest: *mut c_void, src: *const c_void, size: usize) {
     if cfg!(feature = "ntcpy") || Context::use_nt() {
+        debug_bkd!("memory", "Copy non-temporal {size} bytes");
         if size == 0 {
             return;
         }
         MPI_ntcpy(dest, src, size);
     } else {
+        debug_bkd!("memory", "Copy default {size} bytes");
         if size == 0 {
             return;
         }
@@ -881,6 +885,7 @@ pub extern "C" fn MPI_ntcpy(dest: *mut c_void, src: *const c_void, size: usize) 
     unsafe { std::ptr::copy(src, dest, size) }
 }
 
+#[allow(unused_imports)]
 use std::{
     alloc::{alloc, dealloc, Layout},
     slice::from_raw_parts_mut,

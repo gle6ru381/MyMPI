@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
 use super::memory::memcpy;
-use crate::shared::*;
+use crate::{debug_bkd, shared::*};
 use std::{
     mem::size_of,
     ptr::{null_mut, read_volatile, write_volatile},
@@ -17,6 +17,15 @@ macro_rules! field_size {
         }
         size_of_raw(p)
     }};
+}
+
+macro_rules! debug_shm {
+    ($fmt:literal) => {
+        debug_bkd!("shm", $fmt);
+    };
+    ($($args:tt)*) => {
+        debug_bkd!("shm", $($args)*);
+    }
 }
 
 #[repr(C)]
@@ -137,10 +146,11 @@ impl ShmData {
     #[inline(always)]
     pub fn find_unexp(&mut self, rank: i32, tag: i32) -> MPI_Request {
         if self.unexp_queue.len() != 0 {
-            let val = self.unexp_queue.iter().next().unwrap();
-            debug!(
+            let val = unsafe { self.unexp_queue.iter().next().unwrap_unchecked() };
+            debug_shm!(
                 "Find unexpect: {rank}:{tag}, Data: {}:{}",
-                val.rank, val.tag
+                val.rank,
+                val.tag
             );
         }
         self.unexp_queue.find_by_tag(rank, tag)
@@ -262,12 +272,11 @@ impl ShmData {
                 .unwrap()
         };
 
-        debug!("Recv flag: {}", pshm.recv_cell().flag());
         pshm.recv_cell().wait_ne(0);
 
         let mut unexp = false;
         if req.tag != pshm.recv_cell().tag as i32 {
-            debug!(
+            debug_shm!(
                 "Find unexpect message from rank: {}, {} != {}",
                 req.rank,
                 req.tag,
@@ -292,7 +301,7 @@ impl ShmData {
             let layout = std::alloc::Layout::from_size_align(req.cnt as usize, 32).unwrap();
             let buf = unsafe { std::alloc::alloc(layout) };
             if buf.is_null() {
-                debug!("Error allocate unexpected buffer");
+                debug_shm!("Error allocate unexpected buffer");
                 return MPI_ERR_OTHER;
             }
             debug_assert!(
@@ -302,7 +311,7 @@ impl ShmData {
             );
             req.buf = buf as *mut c_void;
         } else if req.cnt < pshm.recv_cell().len {
-            debug!(
+            debug_shm!(
                 "Truncate error for recv {} != {}",
                 req.cnt,
                 pshm.recv_cell().len
@@ -314,8 +323,8 @@ impl ShmData {
 
         let mut length = req.cnt as usize;
         let mut buf = req.buf;
-        //debug_assert!(buf as usize % 32 == 0 || length == 0, "Length: {length}");
-        debug!("Recv length: {length}");
+
+        debug_shm!("Recv length: {length}");
         while length > Cell::buf_len() {
             memcpy(
                 buf,
@@ -330,11 +339,6 @@ impl ShmData {
             length -= Cell::buf_len();
         }
 
-        // debug_assert!(
-        //     buf as usize % 32 == 0 || length == 0,
-        //     "Buff alignment: {}",
-        //     buf as usize % 32
-        // );
         debug_assert!(pshm.recv_cell().buff.as_ptr() as *const c_void as usize % 32 == 0);
         memcpy(buf, pshm.recv_cell().buff.as_ptr() as *const c_void, length);
         pshm.recv_cell().setFlag(0);
@@ -345,10 +349,9 @@ impl ShmData {
         req.stat.cnt = req.cnt;
         req.flag = 1;
 
-        debug!(
-            "Success recover for {}, buffer: {}",
-            Context::rank(),
-            req.buf.is_null()
+        debug_shm!(
+            "Success recover from {}",
+            req.tag
         );
 
         MPI_SUCCESS
@@ -366,14 +369,14 @@ impl ShmData {
                 .as_mut()
                 .unwrap_unchecked()
         };
-        debug!("Send cell flag: {}", pshm.send_cell().flag());
+
         pshm.send_cell().wait_eq(0);
 
         let mut length = req.cnt as usize;
         let mut buf = req.buf;
         pshm.send_cell().len = req.cnt;
         pshm.send_cell().tag = req.tag;
-        debug!("Send length: {length}");
+        debug_shm!("Send length: {length}");
 
         while length > Cell::buf_len() {
             memcpy(
@@ -389,13 +392,6 @@ impl ShmData {
             length -= Cell::buf_len();
         }
 
-        debug_assert!(
-            pshm.send_cell().buff.as_mut_ptr() as usize % 32 == 0,
-            "Current: {}, Cell align: {}",
-            pshm.send_cell().buff.as_mut_ptr() as usize % 32,
-            pshm.send_cell() as *mut Cell as usize % 32
-        );
-
         memcpy(
             pshm.send_cell().buff.as_mut_ptr() as *mut c_void,
             buf,
@@ -409,7 +405,7 @@ impl ShmData {
         req.stat.cnt = req.cnt;
         req.flag = 1;
 
-        debug!("Success send for {}", Context::rank());
+        debug_shm!("Success send to {}", req.tag);
 
         MPI_SUCCESS
     }

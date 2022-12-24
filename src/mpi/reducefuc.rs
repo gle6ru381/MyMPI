@@ -42,7 +42,6 @@ where
         let d = from_raw_parts_mut(dst, len);
         let s = from_raw_parts(src, len);
         for i in 0..len {
-            debug!("&&&&&&&&&&&&&&&&&&Compare {} with {}", s[i], d[i]);
             if s[i] > d[i] {
                 d[i] = s[i];
             }

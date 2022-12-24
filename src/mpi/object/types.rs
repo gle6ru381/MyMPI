@@ -1,6 +1,6 @@
+use crate::debug_objs;
 use std::alloc::{alloc, dealloc, Layout};
 use std::marker::PhantomData;
-use std::mem::forget;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
 use crate::shared::*;
@@ -116,10 +116,12 @@ pub struct Promise<'a, T: Typed + 'a> {
 }
 
 impl<T: Typed> Drop for Promise<'_, T> {
+    #[inline(always)]
     fn drop(&mut self) {
-        if !self.req.is_null() {
-            P_MPI_Request::wait(&mut self.req, null_mut());
+        if !self.get_req().is_null() {
+            self.call_wait();
         }
+        debug_objs!("Promise", "Destroy");
     }
 }
 
@@ -131,21 +133,31 @@ impl<T: Typed> Promise<'_, T> {
         }
     }
 
+    #[inline(always)]
+    fn call_wait(&self) -> i32 {
+        debug_objs!("Promise", "Call wait");
+        P_MPI_Request::wait(&mut self.get_req(), null_mut())
+    }
+
+    const fn get_req(&self) -> MPI_Request {
+        self.req
+    }
+
     #[must_use]
     pub fn request(&mut self) -> MPI_Request {
-        std::mem::replace(&mut self.req, null_mut())
+        std::mem::replace(&mut self.get_req(), null_mut())
     }
 
     pub(crate) fn release(&mut self) {
         self.req = null_mut();
     }
 
-    pub fn wait(&mut self) -> Result<(), i32> {
-        debug_assert!(!self.req.is_null());
-        let res = P_MPI_Request::wait(&mut self.req, null_mut());
+    pub fn wait(mut self) -> Result<Self, i32> {
+        debug_assert!(!self.get_req().is_null());
+        let res = self.call_wait();
         if res == MPI_SUCCESS {
             self.release();
-            return Ok(());
+            return Ok(self);
         }
 
         Err(res)

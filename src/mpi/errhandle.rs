@@ -16,7 +16,7 @@ pub struct HandlerContext {
 macro_rules! MPI_CHECK {
     ($exp:expr, $comm:expr, $code:expr) => {
         if !$exp {
-            debug!("Check failed");
+            crate::debug_core!("Check", "Check failed");
             Context::err_handler().call($comm, $code);
         }
     };
@@ -35,7 +35,7 @@ macro_rules! MPI_CHECK_RET {
             if $exp {
                 MPI_SUCCESS
             } else {
-                debug!("Check failed");
+                crate::debug_core!("Check", "Check failed");
                 Context::err_handler().call($comm, $code)
             }
         } else {

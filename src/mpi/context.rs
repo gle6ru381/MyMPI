@@ -1,9 +1,19 @@
 use crate::backend::shm::ShmData;
 pub use crate::shared::*;
 pub use crate::types::*;
+use crate::debug_core;
 use crate::{comm::CommGroup, MPI_Barrier};
-use crate::{debug, HandlerContext};
+use crate::{HandlerContext};
 use std::ffi::CStr;
+
+macro_rules! debug_init {
+    ($fmt:literal) => {
+        debug_core!("Initialization", $fmt);
+    };
+    ($($args:tt)*) => {
+        debug_core!("Initialization", $($args)*);
+    }
+}
 
 pub struct Context {
     shm: ShmData,
@@ -85,13 +95,20 @@ impl Context {
     fn get_env() -> i32 {
         unsafe {
             CONTEXT.use_nt = Self::get_use_nt();
+            if CONTEXT.use_nt {
+                debug_init!("Enable non-temporal copy");
+            } else {
+                debug_init!("Disable non-temporal copy");
+            }
             if let Some(size) = Self::get_mpi() {
                 CONTEXT.mpi_size = size;
                 CONTEXT.mpi_rank = -1;
+                debug_init!("Using internal, size: {size}");
                 return -1;
             } else if let Some(data) = Self::get_slurm() {
                 CONTEXT.mpi_size = data.size;
                 CONTEXT.mpi_rank = data.rank;
+                debug_init!("Using slurm, size: {}, rank: {}", data.size, data.rank);
                 debug_assert!(data.key >= 0);
                 return data.key;
             } else {
@@ -117,7 +134,10 @@ impl Context {
     }
 
     pub fn progress() -> i32 {
-        unsafe { CONTEXT.shm.progress() }
+        debug_core!("Progress", "Enter");
+        let ret = unsafe { CONTEXT.shm.progress() };
+        debug_core!("Progress", "Exit with code: {ret}");
+        ret
     }
 
     pub fn call_error(comm: MPI_Comm, code: i32) {
@@ -200,33 +220,34 @@ impl Context {
 
             let mut code = CONTEXT.shm.init(pargc, pargv, key);
             if code != MPI_SUCCESS {
-                debug_1!("Error shm init");
+                debug_init!("Error shm init");
                 CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
             }
 
             if CONTEXT.mpi_rank == -1 {
                 code = Self::split_proc(0, CONTEXT.mpi_size);
                 if code != MPI_SUCCESS {
-                    debug_1!("Error split processors");
+                    debug_init!("Error split processors");
                     return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
                 }
             }
 
             code = CONTEXT.comm_group.init(pargc, pargv);
             if code != MPI_SUCCESS {
-                debug_1!("Error init communicators");
+                debug_init!("Error init communicators");
                 return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
             }
 
             CONTEXT.mpi_init = true;
         }
 
-        debug!("Success init");
+        debug_init!("Success");
 
         MPI_SUCCESS
     }
 
     pub fn deinit() -> i32 {
+        debug_init!("Begin finalize");
         MPI_Barrier(MPI_COMM_WORLD);
         unsafe {
             debug_assert!(CONTEXT.mpi_init);

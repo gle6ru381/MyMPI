@@ -6,6 +6,7 @@ use crate::xfer::{recv, send};
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::null_mut;
+use crate::debug_objs;
 
 pub struct MpiObject {}
 
@@ -15,13 +16,16 @@ pub struct Communicator {
 
 impl Drop for MpiObject {
     fn drop(&mut self) {
+        debug_objs!("Initialization", "Finalize MPI");
         Context::deinit();
     }
 }
 
 impl MpiObject {
     pub fn new() -> MpiObject {
+        debug_objs!("Initialization", "Begin init MPI");
         Context::init(null_mut(), null_mut());
+        debug_objs!("Initialization", "Finish init MPI");
         MpiObject {}
     }
 
@@ -46,6 +50,7 @@ impl Communicator {
         rank: i32,
         tag: i32,
     ) -> Result<Promise<'a, T>, i32> {
+        debug_objs!("Communicator", "Send data to {rank} with tag {tag}");
         let mut req: MPI_Request = uninit();
         let err = send(buf, rank, tag, self.comm_id, &mut req);
         if err == MPI_SUCCESS {
@@ -61,6 +66,7 @@ impl Communicator {
         rank: i32,
         tag: i32,
     ) -> Result<Promise<'a, T>, i32> {
+        debug_objs!("Communicator", "Recover data from {rank} with tag {tag}");
         let mut req: MPI_Request = uninit();
         let err = recv(buf, rank, tag, self.comm_id, &mut req);
         if err == MPI_SUCCESS {
