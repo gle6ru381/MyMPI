@@ -11,9 +11,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - stable
-          - beta
-          - 1.64
+          - 1.65
 
     steps:
       - uses: actions/checkout@v2
