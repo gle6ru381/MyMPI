@@ -110,6 +110,13 @@ impl<T: Typed> Data<T> {
     }
 }
 
+#[macro_export]
+macro_rules! to_string {
+    ($name:ident) => {
+        String::from(String::from_utf8_lossy($name.into_slice()).as_ref())
+    };
+}
+
 pub struct Promise<'a, T: Typed + 'a> {
     req: MPI_Request,
     phantom: PhantomData<&'a T>,

@@ -1,4 +1,4 @@
-use crate::shared::*;
+use crate::{shared::*};
 use std::ptr::NonNull;
 
 pub struct Queue<T, const N: usize> {
@@ -36,15 +36,16 @@ where
     pub fn push(&mut self) -> Option<&mut T> {
         if self.size == 0 {
             self.head = 0;
-            self.tail = 0;
+            self.tail = 1;
             self.size += 1;
             self.flags[0] = true;
             return Some(&mut self.queue[0]);
         } else if self.size < N {
+            let idx = self.tail;
             self.tail = (self.tail + 1) % N;
-            self.flags[self.tail] = true;
+            self.flags[idx] = true;
             self.size += 1;
-            return Some(&mut self.queue[self.tail]);
+            return Some(&mut self.queue[idx]);
         }
 
         None
@@ -78,6 +79,7 @@ where
                         break;
                     }
                     if i == self.head {
+                        self.tail = self.head;
                         break;
                     }
                 }
@@ -245,4 +247,35 @@ impl RequestQueue {
     pub const fn new_c() -> Self {
         RequestQueue::new_val(P_MPI_Request::new())
     }
+}
+
+#[test]
+fn test_queue() {
+    let mut q = Queue::<u8, 16>::new();
+    *q.push().unwrap() = 10;
+    *q.push().unwrap() = 16;
+    *q.push().unwrap() = 128;
+    *q.push().unwrap() = 200;
+    *q.push().unwrap() = 0;
+
+    let mut iter = q.iter();
+    for val in [10, 16, 128, 200, 0] {
+        assert_eq!(val, *iter.next().unwrap());
+    }
+    assert!(iter.next().is_none());
+}
+
+#[test]
+fn test_queue_fill() {
+    let mut q = Queue::<u8, 5>::new();
+    for val in [10, 16, 100, 11, 12] {
+        *q.push().unwrap() = val;
+    }
+    assert!(q.push().is_none());
+    q.erase(3);
+    let mut iter = q.iter();
+    for val in [10, 16, 100, 12] {
+        assert_eq!(val, *iter.next().unwrap());
+    }
+    assert!(iter.next().is_none());
 }

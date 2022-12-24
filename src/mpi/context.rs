@@ -3,7 +3,8 @@ use crate::debug_core;
 pub use crate::shared::*;
 pub use crate::types::*;
 use crate::HandlerContext;
-use crate::{comm::CommGroup, MPI_Barrier};
+use crate::{comm::CommGroup};
+use crate::xfer::collectives::*;
 use std::ffi::CStr;
 
 macro_rules! debug_init {

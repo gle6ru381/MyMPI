@@ -3,7 +3,7 @@ use super::types::Typed;
 use crate::context::Context;
 use crate::debug_objs;
 use crate::shared::*;
-use crate::xfer::{recv, send};
+use crate::xfer::ppp::{recv, send};
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::null_mut;

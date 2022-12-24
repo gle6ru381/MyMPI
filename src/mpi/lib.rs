@@ -2,20 +2,18 @@
 
 mod backend;
 mod base;
-mod collectives;
 mod comm;
 mod context;
 mod debug;
 mod errhandle;
 mod metatypes;
 mod object;
-mod reducefuc;
 mod shared;
 mod types;
 mod xfer;
+mod bindings;
 
 pub use base::*;
-pub use collectives::*;
 pub use comm::*;
 pub use errhandle::*;
 pub use metatypes::*;
@@ -24,4 +22,5 @@ pub use object::types::Data;
 pub use object::types::Promise;
 pub use shared::uninit;
 pub use types::*;
-pub use xfer::*;
+pub use bindings::*;
+pub use xfer::collectives::*;

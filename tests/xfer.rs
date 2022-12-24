@@ -194,8 +194,13 @@ fn test_obj_async() {
 
         let mut d2: Data<i32> = Data::new(8);
         let p4 = comm.recv(&mut d2, 1, 5).unwrap();
+       // let mut d: Data<u8> = Data::new(14);
+       // let p3 = comm.recv(&mut d, 1, 1).unwrap();
 
         p4.wait().unwrap();
+       // p3.wait().unwrap();
+
+       // assert_eq!(to_string!(d), "Hello world!!!");
 
         assert_eq!(
             d2.into_slice(),
@@ -217,7 +222,9 @@ fn test_obj_async() {
         let p3 = comm
             .send_slice(&[-110, 0, 2412, 66654, 41241, 586764, -24124, 4241], 0, 5)
             .unwrap();
+        let p4 = comm.send_str("Hello world!!!", 0, 1).unwrap();
 
+        p4.wait().unwrap();
         p3.wait().unwrap();
     }
 }

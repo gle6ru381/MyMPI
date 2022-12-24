@@ -1,9 +1,10 @@
 use crate::debug::DbgEntryExit;
 use crate::{
-    debug_xfer, shared::*, types::*, MPI_Comm_call_errhandler, MPI_Comm_rank, MPI_Comm_size,
-    MPI_Recv, MPI_Send, MPI_Type_size, MPI_CHECK, MPI_CHECK_OP, MPI_CHECK_TYPE,
+    debug_xfer, shared::*, MPI_Comm_call_errhandler, MPI_Comm_rank, MPI_Comm_size,
+    MPI_Type_size, MPI_CHECK, MPI_CHECK_OP, MPI_CHECK_TYPE,
 };
-use crate::{reducefuc::*, MPI_Sendrecv};
+use crate::bindings::{MPI_Recv, MPI_Send, MPI_Sendrecv};
+use super::reducefunc::*;
 use std::{alloc::alloc, alloc::dealloc, alloc::Layout, ffi::c_void};
 
 macro_rules! DbgEnEx {

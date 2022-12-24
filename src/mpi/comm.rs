@@ -4,7 +4,8 @@ use std::mem::size_of;
 use std::slice::from_raw_parts_mut;
 
 use crate::context::Context;
-use crate::{shared::*, types::*, MPI_Allgather, MPI_Allreduce, MPI_CHECK, MPI_CHECK_COMM};
+use crate::{shared::*, types::*, MPI_CHECK, MPI_CHECK_COMM};
+use crate::xfer::collectives::*;
 
 const KEY_INC: i32 = 2;
 
