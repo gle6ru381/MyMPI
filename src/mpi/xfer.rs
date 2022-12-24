@@ -1,7 +1,7 @@
 use crate::context::Context;
-use crate::object::types::Typed;
-use crate::{shared::*, debug_xfer, MPI_CHECK};
 use crate::debug::DbgEntryExit;
+use crate::object::types::Typed;
+use crate::{debug_xfer, shared::*, MPI_CHECK};
 use std::ffi::c_void;
 use std::ptr::null_mut;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
@@ -24,7 +24,12 @@ impl P_MPI_Request {
         if !(*preq).is_null() {
             let req = unsafe { &mut **preq };
             if req.flag != 0 {
-                debug_xfer!("Test", "Find request with tag: {}, rank: {}", req.tag, req.rank);
+                debug_xfer!(
+                    "Test",
+                    "Find request with tag: {}, rank: {}",
+                    req.tag,
+                    req.rank
+                );
                 *pflag = 1;
 
                 if !pstat.is_null() {

@@ -349,10 +349,7 @@ impl ShmData {
         req.stat.cnt = req.cnt;
         req.flag = 1;
 
-        debug_shm!(
-            "Success recover from {}",
-            req.tag
-        );
+        debug_shm!("Success recover from {}", req.tag);
 
         MPI_SUCCESS
     }

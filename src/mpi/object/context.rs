@@ -1,12 +1,12 @@
 use super::types::Promise;
 use super::types::Typed;
 use crate::context::Context;
+use crate::debug_objs;
 use crate::shared::*;
 use crate::xfer::{recv, send};
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::null_mut;
-use crate::debug_objs;
 
 pub struct MpiObject {}
 

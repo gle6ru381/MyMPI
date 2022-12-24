@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use std::marker::PhantomData;
+
 #[macro_export]
 macro_rules! file_pos {
     () => {
@@ -101,11 +104,15 @@ impl<T: Fn(&'static str)> Drop for DbgEntryExit<T> {
 }
 
 #[cfg(not(debug_assertions))]
-pub struct DbgEntryExit<T: Fn(&'static str)>;
+pub struct DbgEntryExit<T: Fn(&'static str)> {
+    phantom: PhantomData<T>,
+}
 
 #[cfg(not(debug_assertions))]
 impl<T: Fn(&'static str)> DbgEntryExit<T> {
-    const fn new(func: T) -> Self {
-        DbgEntryExit
+    pub fn new(_: T) -> Self {
+        DbgEntryExit {
+            phantom: PhantomData,
+        }
     }
 }

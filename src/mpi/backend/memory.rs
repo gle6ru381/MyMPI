@@ -817,7 +817,7 @@ pub fn avx512_cpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
     }
 }
 
-use crate::{shared::*, debug_bkd};
+use crate::{debug_bkd, shared::*};
 
 pub fn memcpy(dest: *mut c_void, src: *const c_void, size: usize) {
     if cfg!(feature = "ntcpy") || Context::use_nt() {
