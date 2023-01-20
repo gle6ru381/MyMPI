@@ -9,6 +9,9 @@ macro_rules! DbgEnEx {
     };
 }
 
+type AllgatherFn = fn(&[u8], &mut[u8], MPI_Comm) -> MpiResult;
+pub const ALLGATHER_IMPL: AllgatherFn = allgather_simple;
+
 
 const ALLGATHER_TAG: i32 = 5;
 

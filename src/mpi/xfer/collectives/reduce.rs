@@ -16,6 +16,9 @@ macro_rules! DbgEnEx {
 
 const REDUCE_TAG: i32 = 3;
 
+type ReduceFn = fn(&[u8], &mut[u8], MPI_Datatype, MPI_Op, i32, MPI_Comm) -> MpiResult;
+pub const REDUCE_IMPL: ReduceFn = reduce_simple;
+
 type FUNC = fn(*const u8, *mut u8, i32, i32);
 
 pub (super) const FUNCTIONS: [FUNC; 3] = [max, min, sum];

@@ -14,6 +14,9 @@ macro_rules! DbgEnEx {
     };
 }
 
+type AllreduceFn = fn(&[u8], &mut[u8], MPI_Datatype, MPI_Op, MPI_Comm) -> MpiResult;
+pub const ALLREDUCE_IMPL: AllreduceFn = allreduce_hypercube;
+
 const ALLREDUCE_TAG: i32 = 4;
 
 pub fn allreduce_hypercube(sbuf: &[u8], rbuf: &mut[u8], dtype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm) -> MpiResult {

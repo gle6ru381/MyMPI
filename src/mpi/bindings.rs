@@ -1,5 +1,11 @@
+use crate::allgather::ALLGATHER_IMPL;
+use crate::allreduce::ALLREDUCE_IMPL;
+use crate::barrier::BARRIER_IMPL;
 use crate::bcast::BCAST_IMPL;
+use crate::gather::GATHER_IMPL;
+use crate::reduce::REDUCE_IMPL;
 use crate::shared::*;
+use crate::xfer::ppp::sendrecv;
 use crate::{uninit, MPI_Comm, MPI_Datatype, MPI_Request};
 use crate::{MPI_CHECK};
 use libc::c_void;
@@ -123,20 +129,22 @@ pub extern "C" fn MPI_Sendrecv(
     MPI_CHECK!(Context::is_init(), comm, MPI_ERR_OTHER);
     MPI_CHECK!(!pstat.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
 
-    let mut req: [MPI_Request; 2] = uninit();
-    let mut stat: [MPI_Status; 2] = uninit();
-
-    todo!();
-
-    // CHECK_RET!(MPI_Isend(sbuf, scnt, sdtype, dest, stag, comm, &mut req[0]));
-    // CHECK_RET!(MPI_Irecv(rbuf, rcnt, rdtype, src, rtag, comm, &mut req[1]));
-    // CHECK_RET!(MPI_Waitall(2, req.as_mut_ptr(), stat.as_mut_ptr()));
+    let send_len = (type_size(sdtype).unwrap() * scnt) as usize;
+    let recv_len = (type_size(rdtype).unwrap() * rcnt) as usize;
 
     unsafe {
-        pstat.write(stat[1]);
+    return match sendrecv(from_raw_parts(sbuf as *const u8, send_len), dest, stag, from_raw_parts_mut(rbuf as *mut u8, recv_len), src, rtag, comm) {
+        Ok(stat) => {
+            if !pstat.is_null() {
+                pstat.write(stat);
+            }
+            MPI_SUCCESS
+        },
+        Err(code) => {
+            code as i32
+        }
     }
-
-    MPI_SUCCESS
+    }
 }
 
 #[no_mangle]
@@ -183,6 +191,9 @@ pub extern "C" fn MPI_Waitall(cnt: i32, preq: *mut MPI_Request, pstat: *mut MPI_
 
 #[no_mangle]
 pub extern "C" fn MPI_Barrier(comm: MPI_Comm) -> i32 {
+    if let Err(code) = BARRIER_IMPL(comm) {
+        return code as i32;
+    }
     MPI_SUCCESS
 }
 
@@ -208,14 +219,21 @@ pub extern "C" fn MPI_Bcast(
 #[no_mangle]
 pub extern "C" fn MPI_Reduce(
     sbuf: *const c_void,
-    mut rbuf: *mut c_void,
+    rbuf: *mut c_void,
     cnt: i32,
     dtype: MPI_Datatype,
     op: MPI_Op,
     root: i32,
     comm: MPI_Comm,
 ) -> i32 {
-    todo!()
+    let data_len = (type_size(dtype).unwrap() * cnt) as usize;
+
+    unsafe {
+        if let Err(code) = REDUCE_IMPL(from_raw_parts(sbuf as *const u8, data_len), from_raw_parts_mut(rbuf as *mut u8, data_len), dtype, op, root, comm) {
+            return code as i32;
+        }
+    }
+    MPI_SUCCESS
 }
 
 #[no_mangle]
@@ -227,7 +245,14 @@ pub extern "C" fn MPI_Allreduce(
     op: MPI_Op,
     comm: MPI_Comm,
 ) -> i32 {
-    todo!()
+    let data_len = (type_size(dtype).unwrap() * cnt) as usize;
+
+    unsafe {
+        if let Err(code) = ALLREDUCE_IMPL(from_raw_parts(sbuf as *const u8, data_len), from_raw_parts_mut(rbuf as *mut u8, data_len), dtype, op, comm) {
+            return code as i32;
+        }
+    }
+    MPI_SUCCESS
 }
 
 #[no_mangle]
@@ -235,12 +260,20 @@ pub extern "C" fn MPI_Gather(
     sbuf: *const c_void,
     scnt: i32,
     sdtype: MPI_Datatype,
-    mut rbuf: *mut c_void,
+    rbuf: *mut c_void,
     rcnt: i32,
     rdtype: MPI_Datatype,
     root: i32,
     comm: MPI_Comm,
 ) -> i32 {
+    let send_len = (type_size(sdtype).unwrap() * scnt) as usize;
+    let recv_len = (type_size(rdtype).unwrap() * rcnt * Context::comm_size(comm)) as usize;
+
+    unsafe {
+        if let Err(code) = GATHER_IMPL(from_raw_parts(sbuf as *const u8, send_len), from_raw_parts_mut(rbuf as *mut u8, recv_len), root, comm) {
+            return code as i32;
+        }
+    }
     MPI_SUCCESS
 }
 
@@ -254,7 +287,15 @@ pub extern "C" fn MPI_Allgather(
     rdtype: MPI_Datatype,
     comm: MPI_Comm,
 ) -> i32 {
-    todo!()
+    let send_len = (type_size(sdtype).unwrap() * scnt) as usize;
+    let recv_len = (type_size(rdtype).unwrap() * rcnt * Context::comm_size(comm)) as usize;
+
+    unsafe {
+        if let Err(code) = ALLGATHER_IMPL(from_raw_parts(sbuf as *const u8, send_len), from_raw_parts_mut(rbuf as *mut u8, recv_len), comm) {
+            return code as i32;
+        }
+    }
+    MPI_SUCCESS
 }
 
 
