@@ -4,7 +4,7 @@ use crate::context::Context;
 use crate::{cstr, p_mpi_abort, shared::*, types::*};
 use zstr::zstr;
 
-type ErrHandler = fn(MPI_Comm, i32);
+type ErrHandler = fn(MPI_Comm, crate::types::MpiError);
 const ERRH_MAX: usize = 2;
 
 pub struct HandlerContext {
@@ -33,13 +33,13 @@ macro_rules! MPI_CHECK_RET {
     ($exp:expr, $comm:expr, $code:expr) => {
         if cfg!(debug_assertions) {
             if $exp {
-                MPI_SUCCESS
+                Ok(())
             } else {
                 crate::debug_core!("Check", "Check failed");
-                Context::err_handler().call($comm, $code)
+                Err(Context::err_handler().call($comm, $code))
             }
         } else {
-            MPI_SUCCESS
+            Ok(())
         }
     };
 }
@@ -48,7 +48,7 @@ macro_rules! MPI_CHECK_RET {
 #[cfg(debug_assertions)]
 macro_rules! MPI_CHECK_COMM {
     ($comm:expr) => {
-        Context::comm().check($comm);
+        Context::comm().check($comm)
     };
 }
 
@@ -62,9 +62,9 @@ macro_rules! MPI_CHECK_COMM {
 macro_rules! MPI_CHECK_COMM_RET {
     ($comm:expr) => {
         if cfg!(debug_assertions) {
-            Context::comm().check($comm)
+            Err(Context::comm().check($comm))
         } else {
-            MPI_SUCCESS
+            Ok(())
         }
     };
 }
@@ -97,20 +97,6 @@ macro_rules! MPI_CHECK_RANK {
     ($rank:expr, $comm:expr) => {
         MPI_SUCCESS
     };
-}
-
-#[macro_export]
-#[cfg(debug_assertions)]
-macro_rules! MPI_CHECK_TYPE {
-    ($dtype:expr, $comm:expr) => {
-        p_mpi_check_type($dtype, $comm);
-    };
-}
-
-#[macro_export]
-#[cfg(not(debug_assertions))]
-macro_rules! MPI_CHECK_TYPE {
-    ($dtype:expr, $comm:expr) => {};
 }
 
 #[macro_export]
@@ -166,11 +152,11 @@ impl HandlerContext {
         Self::ERR_STRINGS[err as usize]
     }
 
-    pub fn check(comm: MPI_Comm, errh: MPI_Errhandler) -> i32 {
+    pub fn check(comm: MPI_Comm, errh: MPI_Errhandler) -> MpiResult {
         MPI_CHECK_RET!(errh >= 0 && errh < ERRH_MAX as i32, comm, MPI_ERR_ARG)
     }
 
-    pub fn call(&self, comm: MPI_Comm, code: MPI_Errhandler) -> i32 {
+    pub fn call(&self, comm: MPI_Comm, code: crate::types::MpiError) -> crate::types::MpiError {
         let errh = Context::comm().err_handler(comm);
         debug_assert!(errh >= 0 && errh < ERRH_MAX as i32);
 
@@ -179,17 +165,17 @@ impl HandlerContext {
     }
 }
 
-fn p_mpi_errors_are_fatal(pcomm: MPI_Comm, pcode: i32) {
-    println!("MPI fatal error for {}, code: {pcode}", Context::rank());
-    p_mpi_abort(pcomm, pcode);
+fn p_mpi_errors_are_fatal(pcomm: MPI_Comm, pcode: crate::types::MpiError) {
+    println!("MPI fatal error for {}, code: {}", Context::rank(), pcode as i32);
+    p_mpi_abort(pcomm, pcode as i32);
 }
 
-fn p_mpi_errors_return(_: MPI_Comm, pcode: i32) {
-    println!("MPI simple error for {}, code: {pcode}", Context::rank())
+fn p_mpi_errors_return(_: MPI_Comm, pcode: crate::types::MpiError) {
+    println!("MPI simple error for {}, code: {}", Context::rank(), pcode as i32)
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Comm_call_errhandler(comm: MPI_Comm, code: i32) -> i32 {
+pub extern "C" fn MPI_Comm_call_errhandler(comm: MPI_Comm, code: crate::types::MpiError) -> i32 {
     Context::err_handler().call(comm, code);
     MPI_SUCCESS
 }
@@ -198,7 +184,7 @@ pub extern "C" fn MPI_Comm_call_errhandler(comm: MPI_Comm, code: i32) -> i32 {
 pub extern "C" fn MPI_Error_class(code: i32, pclass: *mut i32) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK!(
-        code >= MPI_SUCCESS && code <= MPI_ERR_LASTCODE,
+        code >= MPI_SUCCESS && code <= MPI_ERR_LASTCODE as i32,
         MPI_COMM_WORLD,
         MPI_ERR_ARG
     );
@@ -213,7 +199,7 @@ pub extern "C" fn MPI_Error_class(code: i32, pclass: *mut i32) -> i32 {
 pub extern "C" fn MPI_Error_string(code: i32, str: *mut i8, plen: *mut i32) -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
     MPI_CHECK!(
-        code >= MPI_SUCCESS && code <= MPI_ERR_LASTCODE,
+        code >= MPI_SUCCESS && code <= MPI_ERR_LASTCODE as i32,
         MPI_COMM_WORLD,
         MPI_ERR_ARG
     );

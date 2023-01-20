@@ -96,7 +96,7 @@ impl CommGroup {
         MPI_SUCCESS
     }
 
-    pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8) -> i32 {
+    pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8) -> MpiResult {
         debug_assert!(!Context::is_init());
         // debug_assert!(!pargc.is_null());
         // debug_assert!(!pargv.is_null());
@@ -104,10 +104,10 @@ impl CommGroup {
         self.comms.resize(2, Comm::new());
 
         if self.create_self() == MPI_SUCCESS && self.create_world() == MPI_SUCCESS {
-            return MPI_SUCCESS;
+            return Ok(());
         }
 
-        !MPI_SUCCESS
+        Err(MPI_ERR_OTHER)
     }
 
     pub fn deinit(&mut self) -> i32 {
@@ -183,7 +183,7 @@ impl CommGroup {
         Ordering::Equal
     }
 
-    pub fn comm_split(&mut self, comm: MPI_Comm, col: i32, key: i32, pcomm: *mut MPI_Comm) -> i32 {
+    pub fn comm_split(&mut self, comm: MPI_Comm, col: i32, key: i32, pcomm: *mut MPI_Comm) -> MpiResult {
         debug_assert!(Context::is_init());
         debug_assert!(comm >= 0 && comm < self.comms.len() as i32);
         debug_assert!(col >= 0 || col == MPI_UNDEFINED);
@@ -198,7 +198,7 @@ impl CommGroup {
         };
         let pent = unsafe { std::alloc::alloc(layout) as *mut CommSplit };
         if pent.is_null() {
-            return MPI_ERR_OTHER;
+            return Err(MPI_ERR_OTHER);
         }
 
         ent.col = col;
@@ -218,7 +218,7 @@ impl CommGroup {
         );
         if code != MPI_SUCCESS {
             unsafe { std::alloc::dealloc(pent as *mut u8, layout) };
-            return code;
+            return Err(MPI_ERR_OTHER);
         }
 
         if col == MPI_UNDEFINED {
@@ -226,7 +226,7 @@ impl CommGroup {
                 *pcomm = MPI_COMM_NULL;
                 std::alloc::dealloc(pent as *mut u8, layout)
             };
-            return MPI_SUCCESS;
+            return Ok(());
         }
 
         let mut ncol = 0;
@@ -254,7 +254,7 @@ impl CommGroup {
 
                 std::alloc::dealloc(pent as *mut u8, layout);
             }
-            return MPI_SUCCESS;
+            return Ok(());
         }
 
         let hlayout = unsafe {
@@ -266,7 +266,7 @@ impl CommGroup {
         let hent = unsafe { std::alloc::alloc(hlayout) as *mut *mut CommSplit };
         if hent.is_null() {
             unsafe { std::alloc::dealloc(pent as *mut u8, layout) };
-            return MPI_ERR_OTHER;
+            return Err(MPI_ERR_OTHER);
         }
 
         let mut n = 0;
@@ -317,10 +317,10 @@ impl CommGroup {
             std::alloc::dealloc(hent as *mut u8, hlayout);
             std::alloc::dealloc(pent as *mut u8, layout);
         }
-        MPI_SUCCESS
+        Ok(())
     }
 
-    pub fn check(&self, comm: MPI_Comm) -> i32 {
+    pub fn check(&self, comm: MPI_Comm) -> MpiResult {
         MPI_CHECK_RET!(
             comm >= 0 && comm < self.comms.len() as i32,
             MPI_COMM_WORLD,
@@ -328,11 +328,8 @@ impl CommGroup {
         )
     }
 
-    pub fn check_rank(&self, rank: i32, comm: MPI_Comm) -> i32 {
-        let code = MPI_CHECK_COMM_RET!(comm);
-        if code != MPI_SUCCESS {
-            return code;
-        }
+    pub fn check_rank(&self, rank: i32, comm: MPI_Comm) -> MpiResult {
+        MPI_CHECK_COMM!(comm)?;
         MPI_CHECK_RET!(
             rank >= 0 && rank < self.comms[comm as usize].prank.len() as i32,
             comm,
@@ -421,7 +418,7 @@ pub extern "C" fn MPI_Comm_dup(comm: MPI_Comm, pcomm: *mut MPI_Comm) -> i32 {
 
     let code = Context::comm().comm_dup(comm, pcomm);
     if code != MPI_SUCCESS {
-        Context::err_handler().call(comm, code);
+        Context::err_handler().call(comm, MPI_ERR_OTHER);
     }
 
     code
@@ -435,11 +432,12 @@ pub extern "C" fn MPI_Comm_split(comm: MPI_Comm, col: i32, key: i32, pcomm: *mut
     MPI_CHECK!(!pcomm.is_null(), comm, MPI_ERR_ARG);
 
     let code = Context::comm().comm_split(comm, col, key, pcomm);
-    if code != MPI_SUCCESS {
+    if let Err(code) = code {
         Context::err_handler().call(comm, code);
+        return code as i32;
     }
 
-    code
+    MPI_SUCCESS
 }
 
 #[no_mangle]

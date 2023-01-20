@@ -1,5 +1,5 @@
 use crate::context::Context;
-use crate::{shared::*, types::*, MPI_CHECK, MPI_CHECK_COMM};
+use crate::{shared::*, types::*, MPI_CHECK, MPI_CHECK_COMM, MPI_CHECK_COMM_RET};
 
 pub(crate) fn p_mpi_abort(_: MPI_Comm, _: i32) {
     Context::deinit();
@@ -11,17 +11,19 @@ pub(crate) fn p_mpi_abort(_: MPI_Comm, _: i32) {
 pub extern "C" fn MPI_Init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
     MPI_CHECK!(!Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
 
-    return Context::init(pargc, pargv);
+    if let Err(code) = Context::init(pargc, pargv) {
+        return code as i32;
+    }
+    MPI_SUCCESS
 }
 
 #[no_mangle]
 pub extern "C" fn MPI_Finalize() -> i32 {
     MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
-    let code;
 
-    code = Context::deinit();
-    if code != MPI_SUCCESS {
+    if let Err(code) = Context::deinit() {
         Context::call_error(MPI_COMM_WORLD, code);
+        return code as i32;
     }
 
     MPI_SUCCESS

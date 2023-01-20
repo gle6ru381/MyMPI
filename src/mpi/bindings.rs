@@ -1,23 +1,65 @@
-use std::ptr::null_mut;
-use std::slice::{from_raw_parts, from_raw_parts_mut};
-use libc::c_void;
-use crate::{types::*, MPI_CHECK};
 use crate::shared::*;
-use crate::{xfer::ppp::*, MPI_Comm, MPI_Request, p_mpi_type_size, MPI_Datatype, uninit};
+use crate::{uninit, MPI_Comm, MPI_Datatype, MPI_Request};
+use crate::{MPI_CHECK};
+use libc::c_void;
+use std::slice::{from_raw_parts, from_raw_parts_mut};
+use crate::xfer::request::Request;
+use crate::xfer::ppp::recv::{irecv, recv};
+use crate::xfer::ppp::send::{isend, send};
 
 #[no_mangle]
-pub extern "C" fn MPI_Isend(buf: *const c_void, cnt: i32, dtype: MPI_Datatype, dest: i32, tag: i32, comm: MPI_Comm, preq: *mut MPI_Request) -> i32 {
-    let dataLen = p_mpi_type_size(dtype) * cnt;
+pub extern "C" fn MPI_Isend(
+    buf: *const c_void,
+    cnt: i32,
+    dtype: MPI_Datatype,
+    dest: i32,
+    tag: i32,
+    comm: MPI_Comm,
+    preq: *mut MPI_Request,
+) -> i32 {
+    let dataLen = type_size(dtype).unwrap() * cnt;
+    MPI_CHECK!(!preq.is_null(), comm,MPI_ERR_ARG);
+    let mut req: &mut Request = uninit();
     unsafe {
-        send(from_raw_parts(buf as *const u8, dataLen as usize), dest, tag, comm, &mut *preq)
+        if let Err(code) = isend(
+            from_raw_parts(buf as *const u8, dataLen as usize),
+            dest,
+            tag,
+            comm,
+            &mut req,
+        ) {
+            return code as i32;
+        } else {
+            *preq = req;
+            return MPI_SUCCESS;
+        }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn MPI_Irecv(buf: *mut c_void, cnt: i32, dtype: MPI_Datatype, src: i32, tag: i32, comm: MPI_Comm, preq: *mut MPI_Request) -> i32 {
-    let dataLen = p_mpi_type_size(dtype) * cnt;
+pub extern "C" fn MPI_Irecv(
+    buf: *mut c_void,
+    cnt: i32,
+    dtype: MPI_Datatype,
+    src: i32,
+    tag: i32,
+    comm: MPI_Comm,
+    preq: *mut MPI_Request,
+) -> i32 {
+    let dataLen = type_size(dtype).unwrap() * cnt;
+    MPI_CHECK!(!preq.is_null(), comm, MPI_ERR_ARG);
     unsafe {
-        recv(from_raw_parts_mut(buf as *mut u8, dataLen as usize), src, tag, comm, &mut *preq)
+        if let Err(code) = irecv(
+            from_raw_parts_mut(buf as *mut u8, dataLen as usize),
+            src,
+            tag,
+            comm,
+            &mut &mut**preq,
+        ) {
+            return code as i32;
+        } else {
+            return MPI_SUCCESS;
+        }
     }
 }
 
@@ -30,14 +72,14 @@ pub extern "C" fn MPI_Send(
     tag: i32,
     comm: MPI_Comm,
 ) -> i32 {
-    let mut req: MPI_Request = uninit();
-    let mut code = MPI_Isend(buf, cnt, dtype, dest, tag, comm, &mut req);
-    if code != MPI_SUCCESS {
-        return code;
+    let dataLen = type_size(dtype).unwrap() * cnt;
+    MPI_CHECK!(!buf.is_null(), comm,MPI_ERR_ARG);
+    let result;
+    unsafe {
+        result = send(from_raw_parts(buf as *const u8, dataLen as usize), dest, tag, comm);
     }
-    code = MPI_Wait(&mut req, null_mut());
-    if code != MPI_SUCCESS {
-        return code;
+    if let Err(code) = result {
+        return code as i32;
     }
 
     MPI_SUCCESS
@@ -53,14 +95,10 @@ pub extern "C" fn MPI_Recv(
     comm: MPI_Comm,
     pstat: *mut MPI_Status,
 ) -> i32 {
-    let mut req: MPI_Request = uninit();
-    let mut code = MPI_Irecv(buf, cnt, dtype, src, tag, comm, &mut req);
-    if code != MPI_SUCCESS {
-        return code;
-    }
-    code = MPI_Wait(&mut req, pstat);
-    if code != MPI_SUCCESS {
-        return code;
+    let dataLen = type_size(dtype).unwrap() * cnt;
+    let result = unsafe {recv(from_raw_parts_mut(buf as *mut u8, dataLen as usize), src, tag, comm, pstat.as_mut())};
+    if let Err(code) = result {
+        return code as i32;
     }
 
     MPI_SUCCESS
@@ -102,13 +140,21 @@ pub extern "C" fn MPI_Sendrecv(
 pub extern "C" fn MPI_Test(preq: *mut MPI_Request, pflag: *mut i32, pstat: *mut MPI_Status) -> i32 {
     MPI_CHECK!(!preq.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
     MPI_CHECK!(!pflag.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
-    P_MPI_Request::test(unsafe { &mut *preq }, unsafe { &mut *pflag }, pstat)
+    if let Err(code) = unsafe {Request::test(*preq, &mut *pflag, pstat.as_mut())} {
+        return code as i32;
+    } else {
+        return MPI_SUCCESS;
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn MPI_Wait(preq: *mut MPI_Request, pstat: *mut MPI_Status) -> i32 {
     MPI_CHECK!(!preq.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
-    P_MPI_Request::wait(unsafe { &mut *preq }, pstat)
+    if let Err(code) = unsafe { (**preq).wait(pstat.as_mut()) } {
+        return code as i32;
+    } else {
+        return MPI_SUCCESS;
+    }
 }
 
 #[no_mangle]
@@ -122,8 +168,12 @@ pub extern "C" fn MPI_Waitall(cnt: i32, preq: *mut MPI_Request, pstat: *mut MPI_
     if cnt == 0 {
         return MPI_SUCCESS;
     }
-    P_MPI_Request::wait_all(
+    if let Err(code) = Request::wait_all(
         unsafe { std::slice::from_raw_parts_mut(preq, cnt as usize) },
         unsafe { std::slice::from_raw_parts_mut(pstat, cnt as usize) },
-    )
+    ) {
+        return code as i32;
+    } else {
+        return MPI_SUCCESS;
+    }
 }

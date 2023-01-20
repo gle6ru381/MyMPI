@@ -105,6 +105,7 @@ fn test_p2p_unexpect() {
             MPI_COMM_WORLD,
             &mut reqs[1],
         );
+        eprintln!("{}", format!("Ptrs: {}, {}", reqs[0] as usize, reqs[1] as usize));
         MPI_Waitall(2, reqs.as_mut_ptr(), stats.as_mut_ptr());
         MPI_Recv(
             rbuf as *mut c_void,

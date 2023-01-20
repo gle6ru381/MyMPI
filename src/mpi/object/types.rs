@@ -1,4 +1,5 @@
 use crate::debug_objs;
+use crate::xfer::request::Request;
 use std::alloc::{alloc, dealloc, Layout};
 use std::marker::PhantomData;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
@@ -117,56 +118,50 @@ macro_rules! to_string {
     };
 }
 
-pub struct Promise<'a, T: Typed + 'a> {
-    req: MPI_Request,
+pub struct Promise<'a, 'b, T: Typed + 'a> {
+    req: Option<&'b mut Request>,
     phantom: PhantomData<&'a T>,
 }
 
-impl<T: Typed> Drop for Promise<'_, T> {
+impl<T: Typed> Drop for Promise<'_, '_, T> {
     #[inline(always)]
     fn drop(&mut self) {
-        if !self.get_req().is_null() {
+        if self.get_req().is_some() {
             self.call_wait();
         }
         debug_objs!("Promise", "Destroy");
     }
 }
 
-impl<T: Typed> Promise<'_, T> {
-    pub(crate) const fn new(req: MPI_Request) -> Self {
+impl<'a, T: Typed> Promise<'_, 'a, T> {
+    pub(crate) fn new(req: &'a mut Request) -> Self {
         Promise {
-            req,
+            req: Some(req),
             phantom: PhantomData,
         }
     }
 
     #[inline(always)]
-    fn call_wait(&self) -> i32 {
+    fn call_wait(&mut self) -> MpiResult {
         debug_objs!("Promise", "Call wait");
-        P_MPI_Request::wait(&mut self.get_req(), null_mut())
+
+        unsafe{self.get_req().as_mut().unwrap_unchecked()}.wait(None)?;
+
+        Ok(())
     }
 
-    const fn get_req(&self) -> MPI_Request {
-        self.req
-    }
-
-    #[must_use]
-    pub fn request(&mut self) -> MPI_Request {
-        std::mem::replace(&mut self.get_req(), null_mut())
+    fn get_req(&mut self) -> &mut Option<&'a mut Request> {
+        &mut self.req
     }
 
     pub(crate) fn release(&mut self) {
-        self.req = null_mut();
+        self.req = None;
     }
 
-    pub fn wait(mut self) -> Result<Self, i32> {
-        debug_assert!(!self.get_req().is_null());
-        let res = self.call_wait();
-        if res == MPI_SUCCESS {
-            self.release();
-            return Ok(self);
-        }
-
-        Err(res)
+    pub fn wait(mut self) -> Result<Self, MpiError> {
+        self.call_wait()?;
+        self.release();
+        
+        Ok(self)
     }
 }

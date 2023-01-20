@@ -12,6 +12,7 @@ mod shared;
 mod types;
 mod xfer;
 mod bindings;
+mod buffer;
 
 pub use base::*;
 pub use comm::*;
