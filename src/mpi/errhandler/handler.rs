@@ -1,7 +1,8 @@
 use std::ffi::CStr;
 
 use crate::context::Context;
-use crate::{cstr, p_mpi_abort, shared::*, types::*};
+use crate::MPI_CHECK;
+use crate::{shared::*, types::*, cstr};
 use zstr::zstr;
 
 type ErrHandler = fn(MPI_Comm, crate::types::MpiError);
@@ -9,39 +10,6 @@ const ERRH_MAX: usize = 2;
 
 pub struct HandlerContext {
     handlers: [ErrHandler; ERRH_MAX],
-}
-
-#[macro_export]
-#[cfg(debug_assertions)]
-macro_rules! MPI_CHECK {
-    ($exp:expr, $comm:expr, $code:expr) => {
-        if !$exp {
-            crate::debug_core!("Check", "Check failed");
-            Context::err_handler().call($comm, $code);
-        }
-    };
-}
-
-#[macro_export]
-#[cfg(not(debug_assertions))]
-macro_rules! MPI_CHECK {
-    ($expr:expr, $comm:expr, $code:expr) => {};
-}
-
-#[macro_export]
-macro_rules! MPI_CHECK_RET {
-    ($exp:expr, $comm:expr, $code:expr) => {
-        if cfg!(debug_assertions) {
-            if $exp {
-                Ok(())
-            } else {
-                crate::debug_core!("Check", "Check failed");
-                Err(Context::err_handler().call($comm, $code))
-            }
-        } else {
-            Ok(())
-        }
-    };
 }
 
 #[macro_export]
@@ -69,60 +37,6 @@ macro_rules! MPI_CHECK_COMM_RET {
     };
 }
 
-#[macro_export]
-#[cfg(debug_assertions)]
-macro_rules! MPI_CHECK_ERRH {
-    ($comm:tt, $errh:tt) => {
-        p_mpi_check_errh($comm, $errh)
-    };
-}
-
-#[macro_export]
-#[cfg(not(debug_assertions))]
-macro_rules! MPI_CHECK_ERRH {
-    () => {};
-}
-
-#[macro_export]
-#[cfg(debug_assertions)]
-macro_rules! MPI_CHECK_RANK {
-    ($rank:expr, $comm:expr) => {
-        Context::comm().check_rank($rank, $comm)
-    };
-}
-
-#[macro_export]
-#[cfg(not(debug_assertions))]
-macro_rules! MPI_CHECK_RANK {
-    ($rank:expr, $comm:expr) => {
-        MPI_SUCCESS
-    };
-}
-
-#[macro_export]
-#[cfg(debug_assertions)]
-macro_rules! MPI_CHECK_OP {
-    ($op:expr, $comm:expr) => {
-        p_mpi_check_op($op, $comm);
-    };
-}
-
-#[macro_export]
-#[cfg(not(debug_assertions))]
-macro_rules! MPI_CHECK_OP {
-    ($op:expr, $comm:expr) => {};
-}
-
-#[macro_export]
-macro_rules! CHECK_RET {
-    ($e:expr) => {
-        let code = $e;
-        if code != MPI_SUCCESS {
-            return code;
-        }
-    };
-}
-
 impl HandlerContext {
     const ERR_STRINGS: &'static [*const i8] = &[
         cstr!("success"),
@@ -144,7 +58,7 @@ impl HandlerContext {
 
     pub const fn new() -> Self {
         HandlerContext {
-            handlers: [p_mpi_errors_are_fatal, p_mpi_errors_return],
+            handlers: [super::callback::error_fatal, super::callback::error_return],
         }
     }
 
@@ -153,7 +67,7 @@ impl HandlerContext {
     }
 
     pub fn check(comm: MPI_Comm, errh: MPI_Errhandler) -> MpiResult {
-        MPI_CHECK_RET!(errh >= 0 && errh < ERRH_MAX as i32, comm, MPI_ERR_ARG)
+        crate::MPI_CHECK!(errh >= 0 && errh < ERRH_MAX as i32, comm, MPI_ERR_ARG)
     }
 
     pub fn call(&self, comm: MPI_Comm, code: crate::types::MpiError) -> crate::types::MpiError {
@@ -163,15 +77,6 @@ impl HandlerContext {
         self.handlers[errh as usize](comm, code);
         code
     }
-}
-
-fn p_mpi_errors_are_fatal(pcomm: MPI_Comm, pcode: crate::types::MpiError) {
-    println!("MPI fatal error for {}, code: {}", Context::rank(), pcode as i32);
-    p_mpi_abort(pcomm, pcode as i32);
-}
-
-fn p_mpi_errors_return(_: MPI_Comm, pcode: crate::types::MpiError) {
-    println!("MPI simple error for {}, code: {}", Context::rank(), pcode as i32)
 }
 
 #[no_mangle]

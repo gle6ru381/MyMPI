@@ -5,13 +5,14 @@ use crate::xfer::ppp::recv::recv;
 use crate::xfer::ppp::send::send;
 use crate::{debug_xfer, shared::*, MPI_CHECK};
 
+type GatherFn = fn(&[u8], &mut[u8], i32, MPI_Comm) -> MpiResult;
+pub const GATHER_IMPL: GatherFn = gather_ring;
+
 macro_rules! DbgEnEx {
     ($name:literal) => {
         let _dbgEnEx = DbgEntryExit::new(|s| debug_xfer!($name, "{s}"));
     };
 }
-
-
 
 const GATHER_TAG: i32 = 2;
 

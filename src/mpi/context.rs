@@ -1,11 +1,12 @@
 use crate::backend::shm::ShmData;
+use crate::barrier::BARRIER_IMPL;
 use crate::debug_core;
 pub use crate::shared::*;
 pub use crate::types::*;
-use crate::HandlerContext;
-use crate::{comm::CommGroup};
-use crate::xfer::collectives::*;
+use crate::errhandler::handler::HandlerContext;
+use crate::communicator::group::CommGroup;
 use std::ffi::CStr;
+use std::process::exit;
 
 macro_rules! debug_init {
     ($fmt:literal) => {
@@ -40,6 +41,15 @@ struct SlurmData {
     size: i32,
     rank: i32,
     key: i32,
+}
+
+unsafe extern "C" fn child_handler(_:i32) {
+    let mut retcode = 0;
+    if libc::waitpid(-1, &mut retcode, libc::WNOHANG) > 0 {
+        if retcode != 0 {
+            exit(-1);
+        }
+    }
 }
 
 impl Context {
@@ -235,6 +245,7 @@ impl Context {
                     debug_init!("Error split processors");
                     return Err(CONTEXT.err_handler.call(MPI_COMM_WORLD, code));
                 }
+                libc::signal(libc::SIGCHLD, child_handler as usize);
             }
 
             code = CONTEXT.comm_group.init(pargc, pargv);
@@ -253,10 +264,10 @@ impl Context {
 
     pub fn deinit() -> MpiResult {
         debug_init!("Begin finalize");
-        MPI_Barrier(MPI_COMM_WORLD);
+        BARRIER_IMPL(MPI_COMM_WORLD)?;
         unsafe {
             debug_assert!(CONTEXT.mpi_init);
-            CONTEXT.shm.deinit();
+            CONTEXT.shm.deinit()?;
             CONTEXT.comm_group.deinit();
             CONTEXT.mpi_init = false;
             if CONTEXT.mpi_rank == 0 {

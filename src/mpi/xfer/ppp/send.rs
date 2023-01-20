@@ -23,8 +23,8 @@ pub(crate) fn isend<T: Typed>(
 
     let dest = Context::comm().rank_map(comm, rank);
 
-    MPI_CHECK!(dest != Context::rank(), comm, MPI_ERR_INTERN);
-    MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG);
+    MPI_CHECK!(dest != Context::rank(), comm, MPI_ERR_INTERN)?;
+    MPI_CHECK!(tag >= 0 && tag <= 32767, comm, MPI_ERR_TAG)?;
     let tag = Context::comm().tag_map(comm, tag);
     debug_xfer!("Send", "Send call to {dest} with tag {tag}");
 
