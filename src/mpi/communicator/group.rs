@@ -4,7 +4,7 @@ use std::mem::size_of;
 
 use super::comm::{Comm, CommSplit};
 use crate::context::Context;
-use crate::types::*;
+use crate::{types::*, debug_core};
 use crate::types::MpiError::*;
 
 const KEY_INC: i32 = 2;
@@ -288,6 +288,7 @@ impl CommGroup {
 
     pub fn check_rank(&self, rank: i32, comm: MPI_Comm) -> MpiResult {
         self.check(comm)?;
+        debug_core!("Check", "Check rank: {rank} for comm: {comm}, {}", self.comms[comm as usize].prank.len());
         crate::MPI_CHECK!(rank >= 0 && rank < self.comms[comm as usize].prank.len() as i32, comm, MPI_ERR_RANK)
     }
 

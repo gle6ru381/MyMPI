@@ -17,8 +17,7 @@ pub(crate) fn irecv<T: Typed>(
     rank: i32,
     tag: i32,
     comm: MPI_Comm,
-    req: &mut &mut Request,
-) -> MpiResult {
+) -> Result<&'_ mut Request, MpiError> {
     DbgEnEx!("Recv");
 
     let src = Context::comm().rank_map(comm, rank);
@@ -55,15 +54,13 @@ pub(crate) fn irecv<T: Typed>(
             cnt: buf.len() as i32 * type_size(T::into_mpi())?,
             rank: src,
         };
-        *req = r;
-        return Ok(());
+        return Ok(r);
     } else {
         debug_xfer!("Recv", "Create new request");
         let rreq = Context::shm().get_recv();
-        if let Some(r) = rreq {
-            *req = r;
+        if let Some(req) = rreq {
             unsafe {
-                **req = Request {
+                *req = Request {
                     buf: buf.as_ptr() as *mut T as *mut c_void,
                     stat: MPI_Status::new(),
                     comm,
@@ -73,9 +70,8 @@ pub(crate) fn irecv<T: Typed>(
                     rank: src,
                 };
             }
-            return Ok(());
+            return Ok(req);
         } else {
-            *(&mut (*req as *mut Request)) = null_mut();
             Context::err_handler().call(comm, MPI_ERR_INTERN);
             return Err(MPI_ERR_INTERN);
         }
@@ -89,8 +85,7 @@ pub(crate) fn recv<T: Typed>(
     comm: MPI_Comm,
     pstat: Option<&mut MPI_Status>,
 ) -> MpiResult {
-    let mut req: &mut Request = uninit();
-    irecv(buf, rank, tag, comm, &mut req)?;
+    let mut req = irecv(buf, rank, tag, comm)?;
     debug_xfer!("Recv", "Irecv create request: {}", req.rank);
     req.wait(pstat)?;
     

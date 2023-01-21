@@ -83,6 +83,20 @@ macro_rules! debug_bkd {
     }
 }
 
+#[macro_export]
+macro_rules! debug_coll {
+    ($name:literal, $fmt:literal) => {
+        if cfg!(feature = "dbgcoll") {
+            crate::debug_print!(concat!("MPI Collective ", $name), $fmt);
+        }
+    };
+    ($name:literal, $($args:tt)*) => {
+        if cfg!(feature = "dbgcoll") {
+            crate::debug_print!(concat!("MPI Collective ", $name), $($args)*);
+        }
+    }
+}
+
 #[cfg(debug_assertions)]
 pub struct DbgEntryExit<T: Fn(&'static str)> {
     func: T,
@@ -91,7 +105,9 @@ pub struct DbgEntryExit<T: Fn(&'static str)> {
 #[cfg(debug_assertions)]
 impl<T: Fn(&'static str)> DbgEntryExit<T> {
     pub fn new(func: T) -> Self {
-        func("Enter");
+        if cfg!(dbgentryfn) {
+            func("Enter");
+        }
         DbgEntryExit { func }
     }
 }
@@ -99,7 +115,9 @@ impl<T: Fn(&'static str)> DbgEntryExit<T> {
 #[cfg(debug_assertions)]
 impl<T: Fn(&'static str)> Drop for DbgEntryExit<T> {
     fn drop(&mut self) {
-        (self.func)("Exit");
+        if cfg!(dbgentryfn) {
+            (self.func)("Exit");
+        }
     }
 }
 

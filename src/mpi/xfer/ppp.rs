@@ -1,4 +1,6 @@
-use crate::{MPI_Comm, MPI_Status, MpiResult, MPI_Request, uninit, MpiError};
+use std::ptr::null_mut;
+
+use crate::{MPI_Comm, MPI_Status, MPI_Request, uninit, MpiError};
 
 use self::{send::isend, recv::irecv};
 
@@ -20,8 +22,8 @@ pub fn sendrecv(
     let mut req: [*mut Request; 2] = uninit();
     let mut stat: [MPI_Status; 2] = uninit();
 
-    isend(sbuf, dest, stag, comm, unsafe {&mut&mut *req[0]})?;
-    irecv(rbuf, src, rtag, comm, unsafe {&mut&mut *req[1]})?;
+    req[0] = isend(sbuf, dest, stag, comm)?;
+    req[1] = irecv(rbuf, src, rtag, comm)?;
     Request::wait_all(&mut req, &mut stat)?;
 
     Ok(stat[1])

@@ -48,10 +48,9 @@ impl Communicator {
         tag: i32,
     ) -> Result<Promise<'a, '_, T>, MpiError> {
         debug_objs!("Communicator", "Send data to {rank} with tag {tag}");
-        let mut req: &mut Request = uninit();
-        isend(buf, rank, tag, self.comm_id, &mut req)?;
+        let req = isend(buf, rank, tag, self.comm_id)? as *mut Request;
 
-        Ok(Promise::new(req))
+        Ok(Promise::new(unsafe {&mut *req}))
     }
 
     pub fn recv_slice<'a, T: Typed>(
@@ -61,10 +60,9 @@ impl Communicator {
         tag: i32,
     ) -> Result<Promise<'a, '_, T>, MpiError> {
         debug_objs!("Communicator", "Recover data from {rank} with tag {tag}");
-        let mut req: &mut Request = uninit();
-        irecv(buf, rank, tag, self.comm_id, &mut req)?;
+        let req = irecv(buf, rank, tag, self.comm_id)? as *mut Request;
 
-        Ok(Promise::new(req))
+        Ok(Promise::new(unsafe {&mut *req}))
     }
 
     pub fn send<'a, T: Typed, A: Deref<Target = [T]>>(

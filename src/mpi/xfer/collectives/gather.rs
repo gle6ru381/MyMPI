@@ -19,12 +19,12 @@ const GATHER_TAG: i32 = 2;
 fn gather_ring(sbuf: &[u8], rbuf: &mut [u8], root: i32, comm: MPI_Comm) -> MpiResult {
     DbgEnEx!("Gather");
 
-    MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
-    MPI_CHECK!(root >= 0 && root < Context::size(), comm, MPI_ERR_ROOT);
+    MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER)?;
+    MPI_CHECK!(root >= 0 && root < Context::size(), comm, MPI_ERR_ROOT)?;
 
     let csize = Context::comm_size(comm);
     let rank = Context::comm_rank(comm);
-    let blk_size = sbuf.len() / csize as usize;
+    let blk_size = rbuf.len() / csize as usize;
 
     if sbuf.len() == 0 {
         return Ok(());
@@ -59,6 +59,8 @@ fn gather_ring(sbuf: &[u8], rbuf: &mut [u8], root: i32, comm: MPI_Comm) -> MpiRe
             send(buf.to_slice(), (rank + 1) % csize, GATHER_TAG, comm)?;
         }
     }
+
+    debug_xfer!("Gather", "Gather done: {:?}", rbuf);
 
     Ok(())
 }

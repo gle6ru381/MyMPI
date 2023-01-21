@@ -2,7 +2,7 @@ use crate::buffer::DynBuffer;
 use crate::debug::DbgEntryExit;
 use crate::xfer::ppp::recv::recv;
 use crate::xfer::ppp::send::send;
-use crate::{debug_xfer, MPI_Comm, MpiResult, MPI_Op, MPI_CHECK, MPI_MAX, MPI_MIN, MPI_SUM, MPI_Datatype, check_type};
+use crate::{debug_xfer, MPI_Comm, MpiResult, MPI_Op, MPI_CHECK, MPI_MAX, MPI_MIN, MPI_SUM, MPI_Datatype, check_type, type_size};
 use crate::context::Context;
 use super::keychanger::KeyChanger;
 use crate::types::MpiError::*;
@@ -17,7 +17,7 @@ macro_rules! DbgEnEx {
 const REDUCE_TAG: i32 = 3;
 
 type ReduceFn = fn(&[u8], &mut[u8], MPI_Datatype, MPI_Op, i32, MPI_Comm) -> MpiResult;
-pub const REDUCE_IMPL: ReduceFn = reduce_simple;
+pub const REDUCE_IMPL: ReduceFn = reduce_ring;
 
 type FUNC = fn(*const u8, *mut u8, i32, i32);
 
@@ -27,7 +27,7 @@ pub (super) fn check_op(op: MPI_Op, comm: MPI_Comm) -> MpiResult {
     MPI_CHECK!(matches!(op, MPI_MAX | MPI_MIN | MPI_SUM), comm, MPI_ERR_OP)
 }
 
-pub fn reduce_simple(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_Op, root: i32, comm: MPI_Comm) -> MpiResult {
+pub fn reduce_ring(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_Op, root: i32, comm: MPI_Comm) -> MpiResult {
     check_op(op, comm)?;
     check_type(dtype, comm)?;
 
@@ -35,7 +35,7 @@ pub fn reduce_simple(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_
 
     let size = Context::comm_size(comm);
     let rank = Context::comm_rank(comm);
-    let blk_size = sbuf.len() / size as usize;
+    let blk_size = sbuf.len() / type_size(dtype)? as usize;
 
     if blk_size == 0 {
         return Ok(());
@@ -52,7 +52,7 @@ pub fn reduce_simple(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_
             recv(rbuf, (root + 1) % 2, REDUCE_TAG, comm, None)?;
             FUNCTIONS[op as usize](sbuf.as_ptr(), rbuf.as_mut_ptr(), blk_size as i32, dtype);
         } else {
-            send(&sbuf[..blk_size], root, REDUCE_TAG, comm)?;
+            send(sbuf, root, REDUCE_TAG, comm)?;
         }
         return Ok(());
     }
@@ -65,11 +65,12 @@ pub fn reduce_simple(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_
         _dyn_buffer = DynBuffer::new(sbuf.len());
         buff = _dyn_buffer.to_slice();
     } else {
+        _dyn_buffer = DynBuffer::empty();
         buff = rbuf;
     }
 
     if diff % 2 != 0 {
-        send(&sbuf[..blk_size], (size + rank - 1) % size, REDUCE_TAG, comm)?;
+        send(sbuf, (size + rank - 1) % size, REDUCE_TAG, comm)?;
     } else if diff < size - 1 {
         recv(buff, (rank + 1) % size, REDUCE_TAG, comm, None)?;
         FUNCTIONS[op as usize](sbuf.as_ptr(), buff.as_mut_ptr(), blk_size as i32, dtype);

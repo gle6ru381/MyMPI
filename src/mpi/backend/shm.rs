@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
 use super::memory::memcpy;
-use crate::{debug_bkd, shared::*, debug_xfer, xfer::request::Request};
+use crate::{debug_bkd, debug_xfer, shared::*, xfer::request::Request};
 use std::{
     mem::size_of,
     ptr::{null_mut, read_volatile, write_volatile},
@@ -156,7 +156,13 @@ impl ShmData {
     }
 
     pub fn free_req(&mut self, req: MPI_Request) {
-        debug_xfer!("Test", "send queue: {}, unexp: {}, recv: {}", self.send_queue.len(), self.unexp_queue.len(), self.recv_queue.len());
+        debug_xfer!(
+            "Test",
+            "send queue: {}, unexp: {}, recv: {}",
+            self.send_queue.len(),
+            self.unexp_queue.len(),
+            self.recv_queue.len()
+        );
         self.find_queue(req).erase_ptr(req);
     }
 
