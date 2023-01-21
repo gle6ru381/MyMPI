@@ -1,11 +1,12 @@
 use crate::backend::shm::ShmData;
+use crate::barrier::BARRIER_IMPL;
 use crate::debug_core;
 pub use crate::shared::*;
 pub use crate::types::*;
-use crate::HandlerContext;
-use crate::{comm::CommGroup};
-use crate::xfer::collectives::*;
+use crate::errhandler::handler::HandlerContext;
+use crate::communicator::group::CommGroup;
 use std::ffi::CStr;
+use std::process::exit;
 
 macro_rules! debug_init {
     ($fmt:literal) => {
@@ -40,6 +41,15 @@ struct SlurmData {
     size: i32,
     rank: i32,
     key: i32,
+}
+
+unsafe extern "C" fn child_handler(_:i32) {
+    let mut retcode = 0;
+    if libc::waitpid(-1, &mut retcode, libc::WNOHANG) > 0 {
+        if retcode != 0 {
+            exit(-1);
+        }
+    }
 }
 
 impl Context {
@@ -134,14 +144,18 @@ impl Context {
         unsafe { &mut CONTEXT.shm }
     }
 
-    pub fn progress() -> i32 {
+    pub fn progress() -> MpiResult {
         debug_core!("Progress", "Enter");
         let ret = unsafe { CONTEXT.shm.progress() };
-        debug_core!("Progress", "Exit with code: {ret}");
-        ret
+        if let Err(code) = ret {
+            debug_core!("Progress", "Exit with error: {}", code as i32);
+            return Err(code);
+        }
+        debug_core!("Progress", "Exit success");
+        Ok(())
     }
 
-    pub fn call_error(comm: MPI_Comm, code: i32) {
+    pub fn call_error(comm: MPI_Comm, code: MpiError) {
         unsafe {
             CONTEXT.err_handler.call(comm, code);
         }
@@ -194,7 +208,7 @@ impl Context {
         MPI_SUCCESS
     }
 
-    pub fn split_proc(rank: i32, size: i32) -> i32 {
+    pub fn split_proc(rank: i32, size: i32) -> MpiResult {
         unsafe {
             debug_assert!(!CONTEXT.mpi_init);
             CONTEXT.mpi_rank = rank
@@ -203,40 +217,41 @@ impl Context {
         if size > 1 {
             unsafe {
                 match libc::fork() {
-                    -1 => return !MPI_SUCCESS,
+                    -1 => return Err(MPI_ERR_OTHER),
                     0 => return Self::split_proc(rank + size / 2 + size % 2, size / 2),
                     _ => return Self::split_proc(rank, size / 2 + size % 2),
                 }
             }
         }
 
-        MPI_SUCCESS
+        Ok(())
     }
 
-    pub fn init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> i32 {
+    pub fn init(pargc: *mut i32, pargv: *mut *mut *mut i8) -> MpiResult {
         unsafe {
             debug_assert!(!CONTEXT.mpi_init);
 
             let key = Self::get_env();
 
             let mut code = CONTEXT.shm.init(pargc, pargv, key);
-            if code != MPI_SUCCESS {
+            if let Err(code) = code {
                 debug_init!("Error shm init");
-                CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
+                return Err(CONTEXT.err_handler.call(MPI_COMM_WORLD, code));
             }
 
             if CONTEXT.mpi_rank == -1 {
                 code = Self::split_proc(0, CONTEXT.mpi_size);
-                if code != MPI_SUCCESS {
+                if let Err(code) = code {
                     debug_init!("Error split processors");
-                    return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
+                    return Err(CONTEXT.err_handler.call(MPI_COMM_WORLD, code));
                 }
+                libc::signal(libc::SIGCHLD, child_handler as usize);
             }
 
             code = CONTEXT.comm_group.init(pargc, pargv);
-            if code != MPI_SUCCESS {
+            if let Err(code) = code {
                 debug_init!("Error init communicators");
-                return CONTEXT.err_handler.call(MPI_COMM_WORLD, code);
+                return Err(CONTEXT.err_handler.call(MPI_COMM_WORLD, code));
             }
 
             CONTEXT.mpi_init = true;
@@ -244,15 +259,15 @@ impl Context {
 
         debug_init!("Success");
 
-        MPI_SUCCESS
+        Ok(())
     }
 
-    pub fn deinit() -> i32 {
+    pub fn deinit() -> MpiResult {
         debug_init!("Begin finalize");
-        MPI_Barrier(MPI_COMM_WORLD);
+        BARRIER_IMPL(MPI_COMM_WORLD)?;
         unsafe {
             debug_assert!(CONTEXT.mpi_init);
-            CONTEXT.shm.deinit();
+            CONTEXT.shm.deinit()?;
             CONTEXT.comm_group.deinit();
             CONTEXT.mpi_init = false;
             if CONTEXT.mpi_rank == 0 {
@@ -261,7 +276,7 @@ impl Context {
                 std::process::exit(0);
             }
         }
-        MPI_SUCCESS
+        Ok(())
     }
 
     #[inline(always)]

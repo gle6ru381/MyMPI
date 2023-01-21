@@ -49,7 +49,7 @@ where
     }
 }
 
-pub fn sum(src: *const c_void, dst: *mut c_void, len: i32, dtype: MPI_Datatype) {
+pub fn sum(src: *const u8, dst: *mut u8, len: i32, dtype: MPI_Datatype) {
     match dtype {
         MPI_BYTE => sum_proc(src as *const i8, dst as *mut i8, len as usize),
         MPI_INT => sum_proc(src as *const i32, dst as *mut i32, len as usize),
@@ -58,7 +58,7 @@ pub fn sum(src: *const c_void, dst: *mut c_void, len: i32, dtype: MPI_Datatype) 
     }
 }
 
-pub fn min(src: *const c_void, dst: *mut c_void, len: i32, dtype: MPI_Datatype) {
+pub fn min(src: *const u8, dst: *mut u8, len: i32, dtype: MPI_Datatype) {
     match dtype {
         MPI_BYTE => min_proc(src as *const i8, dst as *mut i8, len as usize),
         MPI_INT => min_proc(src as *const i32, dst as *mut i32, len as usize),
@@ -67,7 +67,7 @@ pub fn min(src: *const c_void, dst: *mut c_void, len: i32, dtype: MPI_Datatype) 
     }
 }
 
-pub fn max(src: *const c_void, dst: *mut c_void, len: i32, dtype: MPI_Datatype) {
+pub fn max(src: *const u8, dst: *mut u8, len: i32, dtype: MPI_Datatype) {
     match dtype {
         MPI_BYTE => max_proc(src as *const i8, dst as *mut i8, len as usize),
         MPI_INT => max_proc(src as *const i32, dst as *mut i32, len as usize),

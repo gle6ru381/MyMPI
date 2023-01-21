@@ -3,7 +3,8 @@ use super::types::Typed;
 use crate::context::Context;
 use crate::debug_objs;
 use crate::shared::*;
-use crate::xfer::ppp::{recv, send};
+use crate::xfer::ppp::{recv::*, send::*};
+use crate::xfer::request::Request;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr::null_mut;
@@ -33,13 +34,9 @@ impl MpiObject {
         Context::rank()
     }
 
-    pub fn get_comm(&mut self, comm_id: MPI_Comm) -> Result<Communicator, i32> {
-        let err = Context::comm().check(comm_id);
-        if err == MPI_SUCCESS {
-            Ok(Communicator { comm_id })
-        } else {
-            Err(err)
-        }
+    pub fn get_comm(&mut self, comm_id: MPI_Comm) -> Result<Communicator, MpiError> {
+        Context::comm().check(comm_id)?;
+        Ok(Communicator {comm_id})
     }
 }
 
@@ -49,15 +46,11 @@ impl Communicator {
         buf: &'a [T],
         rank: i32,
         tag: i32,
-    ) -> Result<Promise<'a, T>, i32> {
+    ) -> Result<Promise<'a, '_, T>, MpiError> {
         debug_objs!("Communicator", "Send data to {rank} with tag {tag}");
-        let mut req: MPI_Request = uninit();
-        let err = send(buf, rank, tag, self.comm_id, &mut req);
-        if err == MPI_SUCCESS {
-            Ok(Promise::new(req))
-        } else {
-            Err(err)
-        }
+        let req = isend(buf, rank, tag, self.comm_id)? as *mut Request;
+
+        Ok(Promise::new(unsafe {&mut *req}))
     }
 
     pub fn recv_slice<'a, T: Typed>(
@@ -65,15 +58,11 @@ impl Communicator {
         buf: &'a mut [T],
         rank: i32,
         tag: i32,
-    ) -> Result<Promise<'a, T>, i32> {
+    ) -> Result<Promise<'a, '_, T>, MpiError> {
         debug_objs!("Communicator", "Recover data from {rank} with tag {tag}");
-        let mut req: MPI_Request = uninit();
-        let err = recv(buf, rank, tag, self.comm_id, &mut req);
-        if err == MPI_SUCCESS {
-            Ok(Promise::new(req))
-        } else {
-            Err(err)
-        }
+        let req = irecv(buf, rank, tag, self.comm_id)? as *mut Request;
+
+        Ok(Promise::new(unsafe {&mut *req}))
     }
 
     pub fn send<'a, T: Typed, A: Deref<Target = [T]>>(
@@ -81,7 +70,7 @@ impl Communicator {
         buff: &'a A,
         rank: i32,
         tag: i32,
-    ) -> Result<Promise<'a, T>, i32> {
+    ) -> Result<Promise<'a, '_, T>, MpiError> {
         self.send_slice(buff.deref(), rank, tag)
     }
 
@@ -90,11 +79,16 @@ impl Communicator {
         buff: &'a mut A,
         rank: i32,
         tag: i32,
-    ) -> Result<Promise<'a, T>, i32> {
+    ) -> Result<Promise<'a, '_, T>, MpiError> {
         self.recv_slice(buff.deref_mut(), rank, tag)
     }
 
-    pub fn send_str<'a>(&self, buff: &'a str, rank: i32, tag: i32) -> Result<Promise<'a, u8>, i32> {
+    pub fn send_str<'a>(
+        &self,
+        buff: &'a str,
+        rank: i32,
+        tag: i32,
+    ) -> Result<Promise<'a, '_, u8>, MpiError> {
         self.send_slice(buff.as_bytes(), rank, tag)
     }
 }

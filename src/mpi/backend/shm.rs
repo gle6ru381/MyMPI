@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
 use super::memory::memcpy;
-use crate::{debug_bkd, shared::*, debug_xfer};
+use crate::{debug_bkd, debug_xfer, shared::*, xfer::request::Request};
 use std::{
     mem::size_of,
     ptr::{null_mut, read_volatile, write_volatile},
@@ -118,7 +118,6 @@ impl ShmData {
         if self.unexp_queue.contains(req) {
             return &mut self.unexp_queue;
         }
-
         unreachable!();
     }
 
@@ -133,18 +132,18 @@ impl ShmData {
     }
 
     #[inline(always)]
-    pub fn get_send(&mut self) -> Option<&mut P_MPI_Request> {
+    pub fn get_send(&mut self) -> Option<&mut Request> {
         self.send_queue.push()
     }
 
     #[inline(always)]
-    pub fn get_recv(&mut self) -> Option<&mut P_MPI_Request> {
+    pub fn get_recv(&mut self) -> Option<&mut Request> {
         self.recv_queue.push()
     }
 
     #[allow(unused_variables)]
     #[inline(always)]
-    pub fn find_unexp(&mut self, rank: i32, tag: i32) -> MPI_Request {
+    pub fn find_unexp(&mut self, rank: i32, tag: i32) -> Option<&mut Request> {
         if self.unexp_queue.len() != 0 {
             let val = unsafe { self.unexp_queue.iter().next().unwrap_unchecked() };
             debug_shm!(
@@ -156,9 +155,15 @@ impl ShmData {
         self.unexp_queue.find_by_tag(rank, tag)
     }
 
-    pub fn free_req(&mut self, req: MPI_Request, preq: MPI_Request) {
-        debug_xfer!("Test", "send queue: {}, unexp: {}, recv: {}", self.send_queue.len(), self.unexp_queue.len(), self.recv_queue.len());
-        self.find_queue(req).erase_ptr(preq);
+    pub fn free_req(&mut self, req: MPI_Request) {
+        debug_xfer!(
+            "Test",
+            "send queue: {}, unexp: {}, recv: {}",
+            self.send_queue.len(),
+            self.unexp_queue.len(),
+            self.recv_queue.len()
+        );
+        self.find_queue(req).erase_ptr(req);
     }
 
     pub fn allocate(&mut self) -> i32 {
@@ -204,7 +209,7 @@ impl ShmData {
         MPI_SUCCESS
     }
 
-    pub fn deallocate(&mut self) -> i32 {
+    pub fn deallocate(&mut self) -> MpiResult {
         unsafe {
             if self.shm_key == -1 {
                 libc::munmap(
@@ -215,56 +220,50 @@ impl ShmData {
                 libc::shmdt(self.d as *mut c_void);
             }
         }
-        MPI_SUCCESS
+        Ok(())
     }
 
-    pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8, key: i32) -> i32 {
+    pub fn init(&mut self, _: *mut i32, _: *mut *mut *mut i8, key: i32) -> MpiResult {
         debug_assert!(!Context::is_init());
         if key == -1 {
             if self.allocate() != MPI_SUCCESS {
-                return MPI_ERR_INTERN;
+                return Err(MPI_ERR_INTERN);
             }
         } else {
             if self.allocate_by_key(key) != MPI_SUCCESS {
-                return MPI_ERR_INTERN;
+                return Err(MPI_ERR_INTERN);
             }
         }
-        MPI_SUCCESS
+        Ok(())
     }
 
-    pub fn deinit(&mut self) -> i32 {
+    pub fn deinit(&mut self) -> MpiResult {
         debug_assert!(Context::is_init());
-        if self.deallocate() != MPI_SUCCESS {
-            return MPI_ERR_INTERN;
-        }
-        MPI_SUCCESS
+        self.deallocate()?;
+        Ok(())
     }
 
-    pub fn progress(&mut self) -> i32 {
+    pub fn progress(&mut self) -> MpiResult {
         let d = unsafe { &mut *(self as *mut Self) };
 
         for req in d.recv_queue.iter_mut() {
-            let rc = Self::recv_progress(self as *mut Self, req);
-            if rc != MPI_SUCCESS {
-                return rc;
-            }
+            Self::recv_progress(self as *mut Self, req)?;
         }
 
         for req in d.send_queue.iter_mut() {
-            let rc = Self::send_progress(self as *mut Self, req);
-            if rc != MPI_SUCCESS {
-                return rc;
-            }
+            let rc = Self::send_progress(self as *mut Self, req)?;
         }
 
-        MPI_SUCCESS
+        Ok(())
     }
 
     #[inline(always)]
-    fn recv_progress(this: *mut Self, mut req: &mut P_MPI_Request) -> i32 {
+    fn recv_progress(this: *mut Self, mut req: &mut Request) -> MpiResult {
         if req.flag != 0 {
-            return MPI_SUCCESS;
+            return Ok(());
         }
+
+        debug_shm!("Enter recover progress");
 
         let d = unsafe { &mut *this };
         let pshm = unsafe {
@@ -274,6 +273,8 @@ impl ShmData {
         };
 
         pshm.recv_cell().wait_ne(0);
+
+        debug_shm!("Wait cell");
 
         let mut unexp = false;
         if req.tag != pshm.recv_cell().tag as i32 {
@@ -294,16 +295,17 @@ impl ShmData {
 
                 unexp = true;
             } else {
-                return MPI_ERR_OTHER;
+                return Err(MPI_ERR_OTHER);
             }
         }
 
         if unexp {
+            debug_shm!("Allocate unexpected buffer");
             let layout = std::alloc::Layout::from_size_align(req.cnt as usize, 32).unwrap();
             let buf = unsafe { std::alloc::alloc(layout) };
             if buf.is_null() {
                 debug_shm!("Error allocate unexpected buffer");
-                return MPI_ERR_OTHER;
+                return Err(MPI_ERR_OTHER);
             }
             debug_assert!(
                 buf as usize % 32 == 0,
@@ -317,7 +319,7 @@ impl ShmData {
                 req.cnt,
                 pshm.recv_cell().len
             );
-            return MPI_ERR_TRUNCATE;
+            return Err(MPI_ERR_TRUNCATE);
         } else {
             req.cnt = pshm.recv_cell().len;
         }
@@ -352,13 +354,13 @@ impl ShmData {
 
         debug_shm!("Success recover from {}", req.tag);
 
-        MPI_SUCCESS
+        Ok(())
     }
 
     #[inline(always)]
-    fn send_progress(this: *mut Self, req: &mut P_MPI_Request) -> i32 {
+    fn send_progress(this: *mut Self, req: &mut Request) -> MpiResult {
         if req.flag != 0 {
-            return MPI_SUCCESS;
+            return Ok(());
         }
 
         let d = unsafe { &mut *this };
@@ -405,6 +407,6 @@ impl ShmData {
 
         debug_shm!("Success send to {}", req.tag);
 
-        MPI_SUCCESS
+        Ok(())
     }
 }

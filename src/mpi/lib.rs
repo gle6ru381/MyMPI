@@ -2,20 +2,19 @@
 
 mod backend;
 mod base;
-mod comm;
+mod communicator;
+mod errhandler;
 mod context;
 mod debug;
-mod errhandle;
 mod metatypes;
 mod object;
 mod shared;
 mod types;
 mod xfer;
 mod bindings;
+mod buffer;
 
 pub use base::*;
-pub use comm::*;
-pub use errhandle::*;
 pub use metatypes::*;
 pub use object::context::MpiObject;
 pub use object::types::Data;

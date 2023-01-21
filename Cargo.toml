@@ -7,6 +7,10 @@ edition = "2021"
 opt-level = 1
 debug = true
 
+[profile.test]
+opt-level = 1
+debug = true
+
 [lib]
 name = "mpi"
 path = "src/mpi/lib.rs"
@@ -15,7 +19,7 @@ crate-type = ["rlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["dbgbackend", "dbgcore", "dbgobjects", "dbgxfer"]
+default = ["dbgcoll", "dbgfilepos"]
 ntcpy = []
 quiet = []
 dbgfilepos = []
@@ -23,6 +27,8 @@ dbgcore = []
 dbgobjects = []
 dbgxfer = []
 dbgbackend = []
+dbgcoll = []
+dbgentryfn = []
 
 [dev-dependencies]
 c_bind = {path = "C"}

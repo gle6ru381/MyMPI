@@ -1,4 +1,4 @@
-use crate::{shared::*};
+use crate::{shared::*, xfer::request::Request};
 use std::ptr::NonNull;
 
 pub struct Queue<T, const N: usize> {
@@ -224,28 +224,23 @@ impl<'a, T, const N: usize> Iter<'a, T, N> {
     }
 }
 
-pub type RequestQueue = Queue<P_MPI_Request, 16>;
+pub type RequestQueue = Queue<Request, 16>;
 
 impl RequestQueue {
-    pub fn find_by_tag(&mut self, rank: i32, tag: i32) -> MPI_Request {
-        let val = self.iter_mut().find(|x| x.rank == rank && x.tag == tag);
-        return if val.is_none() {
-            null_mut()
-        } else {
-            unsafe { val.unwrap_unchecked() }
-        };
+    pub fn find_by_tag(&mut self, rank: i32, tag: i32) -> Option<&mut Request> {
+        self.iter_mut().find(|x| x.rank == rank && x.tag == tag)
     }
 
     #[inline(always)]
     pub fn contains(&self, req: MPI_Request) -> bool {
         return self
             .iter()
-            .find(|&x| x as *const P_MPI_Request == req)
+            .find(|&x| x as *const Request == req)
             .is_some();
     }
 
     pub const fn new_c() -> Self {
-        RequestQueue::new_val(P_MPI_Request::new())
+        RequestQueue::new_val(Request::new())
     }
 }
 
