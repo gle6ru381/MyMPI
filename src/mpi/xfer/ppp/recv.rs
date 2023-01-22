@@ -4,7 +4,6 @@ use crate::object::types::Typed;
 use crate::xfer::request::Request;
 use crate::{debug_xfer, shared::*, MPI_CHECK};
 use std::ffi::c_void;
-use std::ptr::null_mut;
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
@@ -59,17 +58,15 @@ pub(crate) fn irecv<T: Typed>(
         debug_xfer!("Recv", "Create new request");
         let rreq = Context::shm().get_recv();
         if let Some(req) = rreq {
-            unsafe {
-                *req = Request {
-                    buf: buf.as_ptr() as *mut T as *mut c_void,
-                    stat: MPI_Status::new(),
-                    comm,
-                    flag: 0,
-                    tag,
-                    cnt: buf.len() as i32 * type_size(T::into_mpi())?,
-                    rank: src,
-                };
-            }
+            *req = Request {
+                buf: buf.as_ptr() as *mut T as *mut c_void,
+                stat: MPI_Status::new(),
+                comm,
+                flag: 0,
+                tag,
+                cnt: buf.len() as i32 * type_size(T::into_mpi())?,
+                rank: src,
+            };
             return Ok(req);
         } else {
             Context::err_handler().call(comm, MPI_ERR_INTERN);
@@ -85,9 +82,9 @@ pub(crate) fn recv<T: Typed>(
     comm: MPI_Comm,
     pstat: Option<&mut MPI_Status>,
 ) -> MpiResult {
-    let mut req = irecv(buf, rank, tag, comm)?;
+    let req = irecv(buf, rank, tag, comm)?;
     debug_xfer!("Recv", "Irecv create request: {}", req.rank);
     req.wait(pstat)?;
-    
+
     Ok(())
 }

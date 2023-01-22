@@ -1,6 +1,6 @@
-use crate::shared::*;
 use crate::debug::DbgEntryExit;
 use crate::debug_xfer;
+use crate::shared::*;
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
@@ -34,7 +34,7 @@ impl Request {
             flag: 0,
             tag: 0,
             cnt: 0,
-            rank: 0
+            rank: 0,
         }
     }
 
@@ -47,12 +47,12 @@ impl Request {
         }
 
         *pflag = 0;
-        let r = &mut unsafe{*req};
+        let r = &mut unsafe { *req };
 
         if r.flag != 0 {
             debug_xfer!("Test", "Find request with tag: {}, rank: {}", r.tag, r.rank);
             *pflag = 1;
-            
+
             if let Some(stat) = pstat {
                 stat.MPI_SOURCE = Context::comm().rank_unmap(r.comm, r.stat.MPI_SOURCE);
                 stat.MPI_TAG = Context::comm().tag_unmap(r.comm, r.stat.MPI_TAG);

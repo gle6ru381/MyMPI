@@ -4,8 +4,8 @@ use std::mem::size_of;
 
 use super::comm::{Comm, CommSplit};
 use crate::context::Context;
-use crate::{types::*, debug_core};
 use crate::types::MpiError::*;
+use crate::{debug_core, types::*};
 
 const KEY_INC: i32 = 2;
 
@@ -143,7 +143,13 @@ impl CommGroup {
         Ordering::Equal
     }
 
-    pub fn comm_split(&mut self, comm: MPI_Comm, col: i32, key: i32, pcomm: *mut MPI_Comm) -> MpiResult {
+    pub fn comm_split(
+        &mut self,
+        comm: MPI_Comm,
+        col: i32,
+        key: i32,
+        pcomm: *mut MPI_Comm,
+    ) -> MpiResult {
         debug_assert!(Context::is_init());
         debug_assert!(comm >= 0 && comm < self.comms.len() as i32);
         debug_assert!(col >= 0 || col == MPI_UNDEFINED);
@@ -283,13 +289,25 @@ impl CommGroup {
     }
 
     pub fn check(&self, comm: MPI_Comm) -> MpiResult {
-        crate::MPI_CHECK!(comm >= 0 && comm < self.comms.len() as i32, MPI_COMM_WORLD, MPI_ERR_COMM)
+        crate::MPI_CHECK!(
+            comm >= 0 && comm < self.comms.len() as i32,
+            MPI_COMM_WORLD,
+            MPI_ERR_COMM
+        )
     }
 
     pub fn check_rank(&self, rank: i32, comm: MPI_Comm) -> MpiResult {
         self.check(comm)?;
-        debug_core!("Check", "Check rank: {rank} for comm: {comm}, {}", self.comms[comm as usize].prank.len());
-        crate::MPI_CHECK!(rank >= 0 && rank < self.comms[comm as usize].prank.len() as i32, comm, MPI_ERR_RANK)
+        debug_core!(
+            "Check",
+            "Check rank: {rank} for comm: {comm}, {}",
+            self.comms[comm as usize].prank.len()
+        );
+        crate::MPI_CHECK!(
+            rank >= 0 && rank < self.comms[comm as usize].prank.len() as i32,
+            comm,
+            MPI_ERR_RANK
+        )
     }
 
     pub fn rank_map(&self, comm: MPI_Comm, rank: i32) -> i32 {

@@ -4,8 +4,7 @@ use crate::xfer::ppp::recv::recv;
 use crate::xfer::ppp::send::send;
 use crate::{debug_xfer, shared::*, MPI_CHECK};
 
-type BCastFn = fn(&mut[u8], i32, MPI_Comm) -> MpiResult;
-pub const BCAST_IMPL : BCastFn = bcast_binary_tree;
+pub type BCastFn = fn(&mut [u8], i32, MPI_Comm) -> MpiResult;
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
@@ -15,7 +14,7 @@ macro_rules! DbgEnEx {
 
 const BCAST_TAG: i32 = 1;
 
-fn bcast_binary_tree(buf: &mut [u8], mut root: i32, comm: MPI_Comm) -> MpiResult {
+pub fn bcast_binaty_tree(buf: &mut [u8], mut root: i32, comm: MPI_Comm) -> MpiResult {
     MPI_CHECK!(root >= 0 && root < Context::size(), comm, MPI_ERR_ROOT);
 
     DbgEnEx!("Broadcast");
@@ -26,7 +25,6 @@ fn bcast_binary_tree(buf: &mut [u8], mut root: i32, comm: MPI_Comm) -> MpiResult
 
     let _ks = KeyChanger::new(Context::comm(), comm);
 
-    let mut code: i32;
     let mut stat: MPI_Status = uninit();
 
     if Context::size() == 2 {
@@ -46,7 +44,6 @@ fn bcast_binary_tree(buf: &mut [u8], mut root: i32, comm: MPI_Comm) -> MpiResult
         loop {
             n >>= 1;
             if n == 0 {
-                code = MPI_SUCCESS;
                 break;
             }
 

@@ -233,10 +233,7 @@ impl RequestQueue {
 
     #[inline(always)]
     pub fn contains(&self, req: MPI_Request) -> bool {
-        return self
-            .iter()
-            .find(|&x| x as *const Request == req)
-            .is_some();
+        return self.iter().find(|&x| x as *const Request == req).is_some();
     }
 
     pub const fn new_c() -> Self {

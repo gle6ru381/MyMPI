@@ -1,6 +1,6 @@
+use crate::xfer::request::Request;
 pub use std::ffi::c_void;
 use std::mem::MaybeUninit;
-use crate::xfer::request::Request;
 
 pub type MPI_Datatype = i32;
 pub type MPI_Comm = i32;
@@ -84,9 +84,9 @@ pub enum MpiError {
     MPI_ERR_INTERN,
     MPI_ERR_PENDING,
     MPI_ERR_IN_STATUS,
-    MPI_ERR_LASTCODE
+    MPI_ERR_LASTCODE,
 }
 
 pub type MpiResult = Result<(), MpiError>;
 
-pub const MPI_SUCCESS : i32 = 0;
+pub const MPI_SUCCESS: i32 = 0;

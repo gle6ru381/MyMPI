@@ -1,3 +1,3 @@
-pub (crate) mod ppp;
-pub (crate) mod collectives;
-pub (crate) mod request;
+pub(crate) mod collectives;
+pub(crate) mod ppp;
+pub(crate) mod request;

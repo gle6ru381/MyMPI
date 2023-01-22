@@ -2,7 +2,7 @@ use std::ffi::CStr;
 
 use crate::context::Context;
 use crate::MPI_CHECK;
-use crate::{shared::*, types::*, cstr};
+use crate::{cstr, shared::*, types::*};
 use zstr::zstr;
 
 type ErrHandler = fn(MPI_Comm, crate::types::MpiError);

@@ -1,8 +1,6 @@
-use std::ptr::null_mut;
+use crate::{uninit, MPI_Comm, MPI_Status, MpiError};
 
-use crate::{MPI_Comm, MPI_Status, MPI_Request, uninit, MpiError};
-
-use self::{send::isend, recv::irecv};
+use self::{recv::irecv, send::isend};
 
 use super::request::Request;
 
@@ -18,7 +16,6 @@ pub fn sendrecv(
     rtag: i32,
     comm: MPI_Comm,
 ) -> Result<MPI_Status, MpiError> {
-
     let mut req: [*mut Request; 2] = uninit();
     let mut stat: [MPI_Status; 2] = uninit();
 

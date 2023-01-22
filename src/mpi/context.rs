@@ -1,10 +1,17 @@
 use crate::backend::shm::ShmData;
-use crate::barrier::BARRIER_IMPL;
+use crate::communicator::group::CommGroup;
 use crate::debug_core;
+use crate::errhandler::handler::HandlerContext;
 pub use crate::shared::*;
 pub use crate::types::*;
-use crate::errhandler::handler::HandlerContext;
-use crate::communicator::group::CommGroup;
+use crate::xfer::collectives::allgather::allgather_simple;
+use crate::xfer::collectives::allgather::AllgatherFn;
+use crate::xfer::collectives::allreduce::AllreduceFn;
+use crate::xfer::collectives::barrier::BarrierFn;
+use crate::xfer::collectives::bcast::BCastFn;
+use crate::xfer::collectives::gather::GatherFn;
+use crate::xfer::collectives::reduce::ReduceFn;
+use crate::xfer::collectives::*;
 use std::ffi::CStr;
 use std::process::exit;
 
@@ -25,6 +32,12 @@ pub struct Context {
     mpi_rank: i32,
     mpi_init: bool,
     use_nt: bool,
+    barrier_impl: BarrierFn,
+    bcast_impl: BCastFn,
+    reduce_impl: ReduceFn,
+    gather_impl: GatherFn,
+    allreduce_impl: AllreduceFn,
+    allgather_impl: AllgatherFn,
 }
 
 static mut CONTEXT: Context = Context {
@@ -35,6 +48,12 @@ static mut CONTEXT: Context = Context {
     err_handler: HandlerContext::new(),
     comm_group: CommGroup::new(),
     use_nt: false,
+    barrier_impl: barrier::barrier_simple,
+    bcast_impl: bcast::bcast_binaty_tree,
+    reduce_impl: reduce::reduce_ring,
+    gather_impl: gather::gather_ring,
+    allreduce_impl: allreduce::allreduce_simple,
+    allgather_impl: allgather_simple,
 };
 
 struct SlurmData {
@@ -43,7 +62,7 @@ struct SlurmData {
     key: i32,
 }
 
-unsafe extern "C" fn child_handler(_:i32) {
+unsafe extern "C" fn child_handler(_: i32) {
     let mut retcode = 0;
     if libc::waitpid(-1, &mut retcode, libc::WNOHANG) > 0 {
         if retcode != 0 {
@@ -264,9 +283,9 @@ impl Context {
 
     pub fn deinit() -> MpiResult {
         debug_init!("Begin finalize");
-        BARRIER_IMPL(MPI_COMM_WORLD)?;
         unsafe {
             debug_assert!(CONTEXT.mpi_init);
+            (CONTEXT.barrier_impl)(MPI_COMM_WORLD)?;
             CONTEXT.shm.deinit()?;
             CONTEXT.comm_group.deinit();
             CONTEXT.mpi_init = false;
@@ -302,5 +321,35 @@ impl Context {
     #[inline(always)]
     pub fn is_init() -> bool {
         unsafe { CONTEXT.mpi_init }
+    }
+
+    #[inline(always)]
+    pub fn barrier() -> BarrierFn {
+        unsafe { CONTEXT.barrier_impl }
+    }
+
+    #[inline(always)]
+    pub fn bcast() -> BCastFn {
+        unsafe { CONTEXT.bcast_impl }
+    }
+
+    #[inline(always)]
+    pub fn reduce() -> ReduceFn {
+        unsafe { CONTEXT.reduce_impl }
+    }
+
+    #[inline(always)]
+    pub fn gather() -> GatherFn {
+        unsafe { CONTEXT.gather_impl }
+    }
+
+    #[inline(always)]
+    pub fn allreduce() -> AllreduceFn {
+        unsafe { CONTEXT.allreduce_impl }
+    }
+
+    #[inline(always)]
+    pub fn allgather() -> AllgatherFn {
+        unsafe { CONTEXT.allgather_impl }
     }
 }

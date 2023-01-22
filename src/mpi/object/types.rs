@@ -127,7 +127,7 @@ impl<T: Typed> Drop for Promise<'_, '_, T> {
     #[inline(always)]
     fn drop(&mut self) {
         if self.get_req().is_some() {
-            self.call_wait();
+            unsafe {self.call_wait().unwrap_unchecked()};
         }
         debug_objs!("Promise", "Destroy");
     }
@@ -145,7 +145,7 @@ impl<'a, T: Typed> Promise<'_, 'a, T> {
     fn call_wait(&mut self) -> MpiResult {
         debug_objs!("Promise", "Call wait");
 
-        unsafe{self.get_req().as_mut().unwrap_unchecked()}.wait(None)?;
+        unsafe { self.get_req().as_mut().unwrap_unchecked() }.wait(None)?;
 
         Ok(())
     }
@@ -161,7 +161,7 @@ impl<'a, T: Typed> Promise<'_, 'a, T> {
     pub fn wait(mut self) -> Result<Self, MpiError> {
         self.call_wait()?;
         self.release();
-        
+
         Ok(self)
     }
 }

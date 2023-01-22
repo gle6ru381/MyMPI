@@ -1,16 +1,10 @@
-use crate::allgather::ALLGATHER_IMPL;
-use crate::allreduce::ALLREDUCE_IMPL;
-use crate::barrier::BARRIER_IMPL;
-use crate::bcast::BCAST_IMPL;
-use crate::gather::GATHER_IMPL;
-use crate::reduce::REDUCE_IMPL;
 use crate::shared::*;
 use crate::xfer::ppp::recv::{irecv, recv};
 use crate::xfer::ppp::send::{isend, send};
 use crate::xfer::ppp::sendrecv;
 use crate::xfer::request::Request;
 use crate::MPI_CHECK;
-use crate::{uninit, MPI_Comm, MPI_Datatype, MPI_Request};
+use crate::{MPI_Comm, MPI_Datatype, MPI_Request};
 use libc::c_void;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
@@ -26,7 +20,6 @@ pub extern "C" fn MPI_Isend(
 ) -> i32 {
     let dataLen = type_size(dtype).unwrap() * cnt;
     MPI_CHECK!(!preq.is_null(), comm, MPI_ERR_ARG);
-    let mut req: &mut Request = uninit();
     unsafe {
         return match isend(
             from_raw_parts(buf as *const u8, dataLen as usize),
@@ -211,7 +204,7 @@ pub extern "C" fn MPI_Waitall(cnt: i32, preq: *mut MPI_Request, pstat: *mut MPI_
 
 #[no_mangle]
 pub extern "C" fn MPI_Barrier(comm: MPI_Comm) -> i32 {
-    if let Err(code) = BARRIER_IMPL(comm) {
+    if let Err(code) = Context::barrier()(comm) {
         return code as i32;
     }
     MPI_SUCCESS
@@ -226,7 +219,7 @@ pub extern "C" fn MPI_Bcast(
     comm: MPI_Comm,
 ) -> i32 {
     let dataLen = type_size(dtype).unwrap() * cnt;
-    if let Err(code) = BCAST_IMPL(
+    if let Err(code) = Context::bcast()(
         unsafe { from_raw_parts_mut(buf as *mut u8, dataLen as usize) },
         root,
         comm,
@@ -249,7 +242,7 @@ pub extern "C" fn MPI_Reduce(
     let data_len = (type_size(dtype).unwrap() * cnt) as usize;
 
     unsafe {
-        if let Err(code) = REDUCE_IMPL(
+        if let Err(code) = Context::reduce()(
             from_raw_parts(sbuf as *const u8, data_len),
             from_raw_parts_mut(rbuf as *mut u8, data_len),
             dtype,
@@ -275,7 +268,7 @@ pub extern "C" fn MPI_Allreduce(
     let data_len = (type_size(dtype).unwrap() * cnt) as usize;
 
     unsafe {
-        if let Err(code) = ALLREDUCE_IMPL(
+        if let Err(code) = Context::allreduce()(
             from_raw_parts(sbuf as *const u8, data_len),
             from_raw_parts_mut(rbuf as *mut u8, data_len),
             dtype,
@@ -303,7 +296,7 @@ pub extern "C" fn MPI_Gather(
     let recv_len = (type_size(rdtype).unwrap() * rcnt * Context::comm_size(comm)) as usize;
 
     unsafe {
-        if let Err(code) = GATHER_IMPL(
+        if let Err(code) = Context::gather()(
             from_raw_parts(sbuf as *const u8, send_len),
             from_raw_parts_mut(rbuf as *mut u8, recv_len),
             root,
@@ -329,7 +322,7 @@ pub extern "C" fn MPI_Allgather(
     let recv_len = (type_size(rdtype).unwrap() * rcnt * Context::comm_size(comm)) as usize;
 
     unsafe {
-        if let Err(code) = ALLGATHER_IMPL(
+        if let Err(code) = Context::allgather()(
             from_raw_parts(sbuf as *const u8, send_len),
             from_raw_parts_mut(rbuf as *mut u8, recv_len),
             comm,

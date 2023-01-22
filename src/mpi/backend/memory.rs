@@ -835,8 +835,12 @@ pub fn memcpy(dest: *mut c_void, src: *const c_void, size: usize) {
     }
 }
 
-pub fn memcpy_slice<T>(dest: &mut [T], src: & [T], size: usize) {
-    memcpy(dest.as_mut_ptr() as *mut c_void, src.as_ptr() as *const c_void, size)
+pub fn memcpy_slice<T>(dest: &mut [T], src: &[T], size: usize) {
+    memcpy(
+        dest.as_mut_ptr() as *mut c_void,
+        src.as_ptr() as *const c_void,
+        size,
+    )
 }
 
 #[cfg(target_feature = "avx512")]

@@ -1,4 +1,4 @@
-use crate::{MpiError, MPI_Comm};
+use crate::{MPI_Comm, MpiError};
 
 #[macro_export]
 macro_rules! MPI_CHECK {
@@ -12,6 +12,7 @@ macro_rules! MPI_CHECK {
     };
 }
 
+#[allow(dead_code)]
 pub fn check_handler(comm: MPI_Comm, handler: MpiError) {
     todo!()
 }

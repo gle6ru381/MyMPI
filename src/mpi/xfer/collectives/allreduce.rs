@@ -1,14 +1,12 @@
-use crate::backend::memory::memcpy_slice;
-use crate::bcast::BCAST_IMPL;
-use crate::buffer::DynBuffer;
-use crate::debug::DbgEntryExit;
-use crate::reduce::REDUCE_IMPL;
-use crate::xfer::ppp::sendrecv;
-use crate::{debug_coll, MPI_Comm, MpiResult, MPI_Op, MPI_Datatype, check_type};
-use crate::context::Context;
 use super::keychanger::KeyChanger;
-use super::reduce::FUNCTIONS;
 use super::reduce::check_op;
+use super::reduce::FUNCTIONS;
+use crate::backend::memory::memcpy_slice;
+use crate::buffer::DynBuffer;
+use crate::context::Context;
+use crate::debug::DbgEntryExit;
+use crate::xfer::ppp::sendrecv;
+use crate::{check_type, debug_coll, MPI_Comm, MPI_Datatype, MPI_Op, MpiResult};
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
@@ -16,21 +14,34 @@ macro_rules! DbgEnEx {
     };
 }
 
-type AllreduceFn = fn(&[u8], &mut[u8], MPI_Datatype, MPI_Op, MPI_Comm) -> MpiResult;
-pub const ALLREDUCE_IMPL: AllreduceFn = allreduce_simple;
+pub type AllreduceFn = fn(&[u8], &mut [u8], MPI_Datatype, MPI_Op, MPI_Comm) -> MpiResult;
 
+#[allow(dead_code)]
 const ALLREDUCE_TAG: i32 = 4;
 
-pub fn allreduce_simple(sbuf: &[u8], rbuf: &mut[u8], dtype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm) -> MpiResult {
+pub fn allreduce_simple(
+    sbuf: &[u8],
+    rbuf: &mut [u8],
+    dtype: MPI_Datatype,
+    op: MPI_Op,
+    comm: MPI_Comm,
+) -> MpiResult {
     DbgEnEx!("Allreduce");
 
-    REDUCE_IMPL(sbuf, rbuf, dtype, op, 0, comm)?;
-    BCAST_IMPL(rbuf, 0, comm)?;
+    Context::reduce()(sbuf, rbuf, dtype, op, 0, comm)?;
+    Context::bcast()(rbuf, 0, comm)?;
 
     Ok(())
 }
 
-pub fn allreduce_tree(sbuf: &[u8], rbuf: &mut[u8], dtype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm) -> MpiResult {
+#[allow(dead_code)]
+pub fn allreduce_tree(
+    sbuf: &[u8],
+    rbuf: &mut [u8],
+    dtype: MPI_Datatype,
+    op: MPI_Op,
+    comm: MPI_Comm,
+) -> MpiResult {
     check_type(dtype, comm)?;
     check_op(op, comm)?;
 
@@ -61,16 +72,37 @@ pub fn allreduce_tree(sbuf: &[u8], rbuf: &mut[u8], dtype: MPI_Datatype, op: MPI_
         let _kc = KeyChanger::new(Context::comm(), comm);
 
         debug_coll!("Allreduce", "Sendrecv to: {}", rank ^ 1);
-        sendrecv(sbuf, rank ^ 1, ALLREDUCE_TAG, rbuf, rank ^ 1, ALLREDUCE_TAG, comm)?;
+        sendrecv(
+            sbuf,
+            rank ^ 1,
+            ALLREDUCE_TAG,
+            rbuf,
+            rank ^ 1,
+            ALLREDUCE_TAG,
+            comm,
+        )?;
         FUNCTIONS[op as usize](sbuf.as_ptr(), rbuf.as_mut_ptr(), blk_size as i32, dtype);
-        
+
         let mut i = 2;
         let tbuf = DynBuffer::new(sbuf.len());
 
         while i < n {
             debug_coll!("Allreduce", "Sendrecv to: {}", rank ^ i);
-            sendrecv(rbuf, rank ^ i, ALLREDUCE_TAG, tbuf.to_slice(), rank ^ i, ALLREDUCE_TAG, comm)?;
-            FUNCTIONS[op as usize](tbuf.to_slice().as_ptr(), rbuf.as_mut_ptr(), blk_size as i32, dtype);
+            sendrecv(
+                rbuf,
+                rank ^ i,
+                ALLREDUCE_TAG,
+                tbuf.to_slice(),
+                rank ^ i,
+                ALLREDUCE_TAG,
+                comm,
+            )?;
+            FUNCTIONS[op as usize](
+                tbuf.to_slice().as_ptr(),
+                rbuf.as_mut_ptr(),
+                blk_size as i32,
+                dtype,
+            );
 
             i <<= 1;
         }

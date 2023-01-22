@@ -18,14 +18,14 @@ pub struct Communicator {
 impl Drop for MpiObject {
     fn drop(&mut self) {
         debug_objs!("Initialization", "Finalize MPI");
-        Context::deinit();
+        unsafe {Context::deinit().unwrap_unchecked()};
     }
 }
 
 impl MpiObject {
     pub fn new() -> MpiObject {
         debug_objs!("Initialization", "Begin init MPI");
-        Context::init(null_mut(), null_mut());
+        unsafe {Context::init(null_mut(), null_mut()).unwrap_unchecked()};
         debug_objs!("Initialization", "Finish init MPI");
         MpiObject {}
     }
@@ -36,7 +36,7 @@ impl MpiObject {
 
     pub fn get_comm(&mut self, comm_id: MPI_Comm) -> Result<Communicator, MpiError> {
         Context::comm().check(comm_id)?;
-        Ok(Communicator {comm_id})
+        Ok(Communicator { comm_id })
     }
 }
 
@@ -50,7 +50,7 @@ impl Communicator {
         debug_objs!("Communicator", "Send data to {rank} with tag {tag}");
         let req = isend(buf, rank, tag, self.comm_id)? as *mut Request;
 
-        Ok(Promise::new(unsafe {&mut *req}))
+        Ok(Promise::new(unsafe { &mut *req }))
     }
 
     pub fn recv_slice<'a, T: Typed>(
@@ -62,7 +62,7 @@ impl Communicator {
         debug_objs!("Communicator", "Recover data from {rank} with tag {tag}");
         let req = irecv(buf, rank, tag, self.comm_id)? as *mut Request;
 
-        Ok(Promise::new(unsafe {&mut *req}))
+        Ok(Promise::new(unsafe { &mut *req }))
     }
 
     pub fn send<'a, T: Typed, A: Deref<Target = [T]>>(

@@ -4,7 +4,10 @@ pub struct KeyChanger<'a> {
 }
 
 impl<'a> KeyChanger<'a> {
-    pub fn new(group: &'a mut crate::communicator::group::CommGroup, comm: crate::MPI_Comm) -> Self {
+    pub fn new(
+        group: &'a mut crate::communicator::group::CommGroup,
+        comm: crate::MPI_Comm,
+    ) -> Self {
         group.inc_key(comm);
         KeyChanger { group, comm }
     }

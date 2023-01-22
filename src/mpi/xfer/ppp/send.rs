@@ -50,7 +50,6 @@ pub(crate) fn isend<T: Typed>(
 }
 
 pub(crate) fn send<T: Typed>(buf: &[T], rank: i32, tag: i32, comm: MPI_Comm) -> MpiResult {
-    let mut req: &mut Request = uninit();
     let req = isend(buf, rank, tag, comm)?;
     req.wait(None)?;
 

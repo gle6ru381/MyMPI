@@ -1,8 +1,8 @@
 use crate::context::Context;
-use crate::{shared::*, types::*, MPI_CHECK, MPI_CHECK_COMM, MPI_CHECK_COMM_RET};
+use crate::{shared::*, types::*, MPI_CHECK, MPI_CHECK_COMM};
 
 pub(crate) fn p_mpi_abort(_: MPI_Comm, _: i32) {
-    Context::deinit();
+    Context::deinit().unwrap();
 
     panic!();
 }

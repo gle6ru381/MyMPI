@@ -1,8 +1,7 @@
-use crate::context::Context;
-use crate::{shared::*, types::*, MPI_CHECK, MPI_CHECK_COMM};
+use crate::{shared::*, types::*};
 
 #[derive(Clone)]
-pub (super) struct Comm {
+pub(super) struct Comm {
     pub prank: Vec<i32>,
     pub errh: MPI_Errhandler,
     pub rank: i32,

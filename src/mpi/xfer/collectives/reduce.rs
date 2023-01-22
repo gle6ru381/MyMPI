@@ -1,12 +1,15 @@
+use super::keychanger::KeyChanger;
+use super::reducefunc::*;
 use crate::buffer::DynBuffer;
+use crate::context::Context;
 use crate::debug::DbgEntryExit;
+use crate::types::MpiError::*;
 use crate::xfer::ppp::recv::recv;
 use crate::xfer::ppp::send::send;
-use crate::{debug_xfer, MPI_Comm, MpiResult, MPI_Op, MPI_CHECK, MPI_MAX, MPI_MIN, MPI_SUM, MPI_Datatype, check_type, type_size};
-use crate::context::Context;
-use super::keychanger::KeyChanger;
-use crate::types::MpiError::*;
-use super::reducefunc::*;
+use crate::{
+    check_type, debug_xfer, type_size, MPI_Comm, MPI_Datatype, MPI_Op, MpiResult, MPI_CHECK,
+    MPI_MAX, MPI_MIN, MPI_SUM,
+};
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
@@ -16,18 +19,24 @@ macro_rules! DbgEnEx {
 
 const REDUCE_TAG: i32 = 3;
 
-type ReduceFn = fn(&[u8], &mut[u8], MPI_Datatype, MPI_Op, i32, MPI_Comm) -> MpiResult;
-pub const REDUCE_IMPL: ReduceFn = reduce_ring;
+pub type ReduceFn = fn(&[u8], &mut [u8], MPI_Datatype, MPI_Op, i32, MPI_Comm) -> MpiResult;
 
 type FUNC = fn(*const u8, *mut u8, i32, i32);
 
-pub (super) const FUNCTIONS: [FUNC; 3] = [max, min, sum];
+pub(super) const FUNCTIONS: [FUNC; 3] = [max, min, sum];
 
-pub (super) fn check_op(op: MPI_Op, comm: MPI_Comm) -> MpiResult {
+pub(super) fn check_op(op: MPI_Op, comm: MPI_Comm) -> MpiResult {
     MPI_CHECK!(matches!(op, MPI_MAX | MPI_MIN | MPI_SUM), comm, MPI_ERR_OP)
 }
 
-pub fn reduce_ring(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_Op, root: i32, comm: MPI_Comm) -> MpiResult {
+pub fn reduce_ring(
+    sbuf: &[u8],
+    rbuf: &mut [u8],
+    dtype: MPI_Datatype,
+    op: MPI_Op,
+    root: i32,
+    comm: MPI_Comm,
+) -> MpiResult {
     check_op(op, comm)?;
     check_type(dtype, comm)?;
 
@@ -88,9 +97,14 @@ pub fn reduce_ring(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_Op
         tbuf = DynBuffer::empty();
     } else if diff < size - 2 {
         tbuf = DynBuffer::new(sbuf.len());
-        
+
         recv(tbuf.to_slice(), (rank + 2) % size, REDUCE_TAG, comm, None)?;
-        FUNCTIONS[op as usize](tbuf.to_slice().as_ptr(), buff.as_mut_ptr(), blk_size as i32, dtype);
+        FUNCTIONS[op as usize](
+            tbuf.to_slice().as_ptr(),
+            buff.as_mut_ptr(),
+            blk_size as i32,
+            dtype,
+        );
     } else {
         tbuf = DynBuffer::empty();
     }
@@ -107,8 +121,19 @@ pub fn reduce_ring(sbuf: &[u8], rbuf: &mut [u8], dtype: MPI_Datatype, op: MPI_Op
                 }
             }
         } else if diff < size - iold {
-            recv(tbuf.to_slice(), (rank + iold) % size, REDUCE_TAG, comm, None)?;
-            FUNCTIONS[op as usize](tbuf.to_slice().as_ptr(), buff.as_mut_ptr(), blk_size as i32, dtype);
+            recv(
+                tbuf.to_slice(),
+                (rank + iold) % size,
+                REDUCE_TAG,
+                comm,
+                None,
+            )?;
+            FUNCTIONS[op as usize](
+                tbuf.to_slice().as_ptr(),
+                buff.as_mut_ptr(),
+                blk_size as i32,
+                dtype,
+            );
         }
 
         iold = i;
