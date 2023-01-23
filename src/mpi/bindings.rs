@@ -1,4 +1,4 @@
-use crate::shared::*;
+use crate::{shared::*, metatypes};
 use crate::xfer::ppp::recv::{irecv, recv};
 use crate::xfer::ppp::send::{isend, send};
 use crate::xfer::ppp::sendrecv;
@@ -409,4 +409,45 @@ pub extern "C" fn MPI_Comm_set_errhandler(comm: MPI_Comm, errh: MPI_Errhandler) 
     Context::comm().set_err_handler(comm, errh);
 
     MPI_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn MPI_Comm_call_errhandler(comm: MPI_Comm, code: crate::types::MpiError) -> i32 {
+    Context::err_handler().call(comm, code);
+    MPI_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn MPI_Type_size(dtype: MPI_Datatype, psize: *mut i32) -> i32 {
+    MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
+    MPI_CHECK!(!psize.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
+
+    unsafe {
+        return match metatypes::type_size(dtype) {
+            Ok(size) => {
+                psize.write(size);
+                MPI_SUCCESS
+            }
+            Err(code) => code as i32,
+        };
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn MPI_Get_count(
+    pstat: *const MPI_Status,
+    dtype: MPI_Datatype,
+    pcnt: *mut i32,
+) -> i32 {
+    MPI_CHECK!(Context::is_init(), MPI_COMM_WORLD, MPI_ERR_OTHER);
+    MPI_CHECK!(!pstat.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
+    MPI_CHECK!(!pcnt.is_null(), MPI_COMM_WORLD, MPI_ERR_ARG);
+
+    return match metatypes::type_size(dtype) {
+        Ok(size) => unsafe {
+            pcnt.write((*pstat).cnt / size);
+            MPI_SUCCESS
+        },
+        Err(code) => code as i32,
+    };
 }

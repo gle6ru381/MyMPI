@@ -5,11 +5,12 @@ use crate::MPI_CHECK;
 use crate::{cstr, shared::*, types::*};
 use zstr::zstr;
 
-type ErrHandler = fn(MPI_Comm, crate::types::MpiError);
+use super::callback;
+
 const ERRH_MAX: usize = 2;
 
 pub struct HandlerContext {
-    handlers: [ErrHandler; ERRH_MAX],
+    handlers: [callback::Callback; ERRH_MAX],
 }
 
 #[macro_export]
@@ -77,12 +78,6 @@ impl HandlerContext {
         self.handlers[errh as usize](comm, code);
         code
     }
-}
-
-#[no_mangle]
-pub extern "C" fn MPI_Comm_call_errhandler(comm: MPI_Comm, code: crate::types::MpiError) -> i32 {
-    Context::err_handler().call(comm, code);
-    MPI_SUCCESS
 }
 
 #[no_mangle]

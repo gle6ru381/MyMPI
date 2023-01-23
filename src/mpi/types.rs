@@ -66,6 +66,7 @@ pub const MPI_ERRORS_RETURN: i32 = 1;
 
 pub const MPI_MAX_ERROR_STRING: i32 = 32;
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub enum MpiError {
     MPI_ERR_BUFFER = 1,

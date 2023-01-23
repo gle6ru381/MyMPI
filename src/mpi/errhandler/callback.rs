@@ -3,7 +3,7 @@ use libc::exit;
 use crate::debug_core;
 use crate::shared::*;
 
-type Callback = fn(MPI_Comm, crate::types::MpiError);
+pub (super) type Callback = fn(MPI_Comm, crate::types::MpiError);
 
 pub fn error_fatal(_: MPI_Comm, pcode: crate::types::MpiError) {
     debug_core!("Error", "Fatal error, code: {}", pcode as i32);
