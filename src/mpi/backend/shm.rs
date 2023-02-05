@@ -4,20 +4,8 @@ use super::memory::memcpy;
 use crate::{debug_bkd, debug_xfer, shared::*, xfer::request::Request};
 use std::{
     mem::size_of,
-    ptr::{null_mut, read_volatile, write_volatile},
+    ptr::null_mut,
 };
-
-macro_rules! field_size {
-    ($t:ident :: $field:ident) => {{
-        let m = core::mem::MaybeUninit::<$t>::uninit();
-        let p = unsafe { core::ptr::addr_of!((*(&m as *const _ as *const $t)).$field) };
-
-        const fn size_of_raw<T>(_: *const T) -> usize {
-            core::mem::size_of::<T>()
-        }
-        size_of_raw(p)
-    }};
-}
 
 macro_rules! debug_shm {
     ($fmt:literal) => {
@@ -32,35 +20,46 @@ macro_rules! debug_shm {
 struct Cell {
     pub len: i32,             // 4
     pub tag: i32,             // 8
-    m_flag: i8,               // 9
-    pub pad: [i8; 23],        // 32
+    pub m_flag: std::sync::atomic::AtomicUsize, // 16
+    pub pad: [i8; 16],        // 32
     pub buff: [i8; 33554400], // 33 554 432
 }
 
 impl Cell {
     pub const fn buf_len() -> usize {
-        field_size!(Cell::buff)
+        let m = null_mut() as *const Self;
+        let p = unsafe {core::ptr::addr_of!((*m).buff)};
+        
+        const fn size_of_raw<T>(_: *const T) -> usize {
+            core::mem::size_of::<T>()
+        }
+        size_of_raw(p)
     }
 
     #[inline(always)]
-    pub fn flag(&self) -> i8 {
-        return unsafe { read_volatile(&self.m_flag) };
+    pub fn flag(&self) -> usize {
+        self.m_flag.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     #[inline(always)]
-    pub fn setFlag(&mut self, val: i8) {
-        return unsafe { write_volatile(&mut self.m_flag, val) };
+    pub fn set_flag(&mut self, val: usize) {
+        self.m_flag.store(val, std::sync::atomic::Ordering::SeqCst);
     }
 
     #[inline(always)]
-    pub fn wait_eq(&self, target: i8) {
+    pub fn dec_flag(&mut self) {
+        self.m_flag.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[inline(always)]
+    pub fn wait_eq(&self, target: usize) {
         while self.flag() != target {
             continue;
         }
     }
 
     #[inline(always)]
-    pub fn wait_ne(&self, target: i8) {
+    pub fn wait_ne(&self, target: usize) {
         while self.flag() == target {
             continue;
         }
@@ -105,7 +104,7 @@ pub struct ShmData {
     unexp_queue: RequestQueue,
 }
 
-unsafe impl Sync for ShmData {}
+//unsafe impl Sync for ShmData {}
 
 impl ShmData {
     fn find_queue(&mut self, req: MPI_Request) -> &mut RequestQueue {
@@ -251,7 +250,7 @@ impl ShmData {
         }
 
         for req in d.send_queue.iter_mut() {
-            let rc = Self::send_progress(self as *mut Self, req)?;
+            Self::send_progress(self as *mut Self, req)?;
         }
 
         Ok(())
@@ -267,9 +266,7 @@ impl ShmData {
 
         let d = unsafe { &mut *this };
         let pshm = unsafe {
-            d.d.add((req.rank * Context::size() + Context::rank()) as usize)
-                .as_mut()
-                .unwrap()
+            &mut *d.d.add((req.rank * Context::size() + Context::rank()) as usize)
         };
 
         pshm.recv_cell().wait_ne(0);
@@ -334,7 +331,7 @@ impl ShmData {
                 pshm.recv_cell().buff.as_ptr() as *const c_void,
                 Cell::buf_len(),
             );
-            pshm.recv_cell().setFlag(0);
+            pshm.recv_cell().set_flag(0);
             pshm.swapRecv();
             pshm.recv_cell().wait_ne(0);
 
@@ -344,7 +341,7 @@ impl ShmData {
 
         debug_assert!(pshm.recv_cell().buff.as_ptr() as *const c_void as usize % 32 == 0);
         memcpy(buf, pshm.recv_cell().buff.as_ptr() as *const c_void, length);
-        pshm.recv_cell().setFlag(0);
+        pshm.recv_cell().set_flag(0);
         pshm.swapRecv();
 
         req.stat.MPI_SOURCE = req.rank;
@@ -384,7 +381,7 @@ impl ShmData {
                 buf,
                 Cell::buf_len(),
             );
-            pshm.send_cell().setFlag(1);
+            pshm.send_cell().set_flag(1);
             pshm.swapSend();
             pshm.send_cell().wait_eq(0);
 
@@ -397,7 +394,7 @@ impl ShmData {
             buf,
             length,
         );
-        pshm.send_cell().setFlag(1);
+        pshm.send_cell().set_flag(1);
         pshm.swapSend();
 
         req.stat.MPI_SOURCE = req.rank;
