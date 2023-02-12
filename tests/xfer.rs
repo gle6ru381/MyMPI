@@ -194,13 +194,13 @@ fn test_obj_async() {
 
         let mut d2: Data<i32> = Data::new(8);
         let p4 = comm.recv(&mut d2, 1, 5).unwrap();
-        // let mut d: Data<u8> = Data::new(14);
-        // let p3 = comm.recv(&mut d, 1, 1).unwrap();
+        let mut d: Data<u8> = Data::new(14);
+        let p3 = comm.recv(&mut d, 1, 1).unwrap();
 
         p4.wait().unwrap();
-        // p3.wait().unwrap();
+        p3.wait().unwrap();
 
-        // assert_eq!(to_string!(d), "Hello world!!!");
+        assert_eq!(to_string!(d), "Hello world!!!");
 
         assert_eq!(
             d2.into_slice(),

@@ -104,8 +104,6 @@ pub struct ShmData {
     unexp_queue: RequestQueue,
 }
 
-//unsafe impl Sync for ShmData {}
-
 impl ShmData {
     fn find_queue(&mut self, req: MPI_Request) -> &mut RequestQueue {
         if self.recv_queue.contains(req) {
@@ -282,8 +280,7 @@ impl ShmData {
                 pshm.recv_cell().tag
             );
             let preqx = d.unexp_queue.push();
-            if preqx.is_some() {
-                let reqx = unsafe { preqx.unwrap_unchecked() };
+            if let Some(reqx) = preqx {
                 reqx.rank = req.rank;
                 reqx.tag = pshm.recv_cell().tag as i32;
                 reqx.cnt = pshm.recv_cell().len;
