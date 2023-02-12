@@ -42,8 +42,8 @@ fn main() {
     bench!("bcast", "bcast_8_.csv", "collective", 8);
     bench_nt!("bcast", "ntbcast_8_.csv", "collective", 8);
 
-    bench!("p2p", "p2p.csv", "p2p", 2);
-    bench_nt!("p2p", "ntp2p.csv", "p2p", 2);
+    // bench!("p2p", "p2p.csv", "p2p", 2);
+    // bench_nt!("p2p", "ntp2p.csv", "p2p", 2);
 
     bench!("gather", "gather_4_.csv", "collective", 4);
     bench_nt!("gather", "ntgather_4_.csv", "collective", 4);

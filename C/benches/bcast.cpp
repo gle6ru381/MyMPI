@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#define CSV_SEP " , "
+#define CSV_SEP ","
 
 #include <bench_template.h>
 

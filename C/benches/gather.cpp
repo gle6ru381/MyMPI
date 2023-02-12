@@ -1,6 +1,6 @@
 #include <mpi.h>
 
-#define CSV_SEP " , "
+#define CSV_SEP ","
 
 #include <bench_template.h>
 

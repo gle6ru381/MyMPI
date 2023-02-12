@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <vector>
 
-#define CSV_SEP " , "
+#define CSV_SEP ","
 
 template <typename T, size_t N>
 T median(std::array<T, N> const& arr)
