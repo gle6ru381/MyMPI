@@ -7,10 +7,14 @@
 int main(int argc, char** argv)
 {
     char const* fileName;
-    if (argc == 2) {
+    if (argc >= 2) {
         fileName = argv[1];
     } else {
         fileName = "memcpy.csv";
+    }
+
+    if (argc == 3 && argv[2] != "0") {
+        setenv("MPI_SIZE", argv[2], 1);
     }
 
     auto tmpbuff = new char[bench_max_size() / 8];
