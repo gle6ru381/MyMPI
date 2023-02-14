@@ -15,9 +15,9 @@
 #define NEED_HEADER 0
 #endif
 
-static constexpr int nsamples = 1000;
-static constexpr int vec_sizes[] = {7936, 130'048, 6'287'360};
-static constexpr int msg_sizes[] = {7936, 130'048, 6'287'360};
+static constexpr int nsamples = 250;
+static constexpr int vec_sizes[] = {15'360, 130'048, 10'480'640, 20'961'280};
+static constexpr int msg_sizes[] = {15'360, 130'048, 10'480'640, 20'961'280};
 
 constexpr int bench_max_size()
 {
