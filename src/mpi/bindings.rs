@@ -7,6 +7,7 @@ use crate::MPI_CHECK;
 use crate::{MPI_Comm, MPI_Datatype, MPI_Request};
 use libc::c_void;
 use std::slice::{from_raw_parts, from_raw_parts_mut};
+use crate::metatypes::type_size;
 
 #[no_mangle]
 pub extern "C" fn MPI_Isend(

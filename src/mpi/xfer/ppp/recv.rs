@@ -4,6 +4,7 @@ use crate::object::types::Typed;
 use crate::xfer::request::Request;
 use crate::{debug_xfer, shared::*, MPI_CHECK};
 use std::ffi::c_void;
+use crate::metatypes::type_size;
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
@@ -52,6 +53,8 @@ pub(crate) fn irecv<T: Typed>(
             tag,
             cnt: buf.len() as i32 * type_size(T::into_mpi())?,
             rank: src,
+            isColl: false,
+            collRoot: -1
         };
         return Ok(r);
     } else {
@@ -66,6 +69,8 @@ pub(crate) fn irecv<T: Typed>(
                 tag,
                 cnt: buf.len() as i32 * type_size(T::into_mpi())?,
                 rank: src,
+                isColl: false,
+                collRoot: -1
             };
             return Ok(req);
         } else {

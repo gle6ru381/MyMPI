@@ -21,8 +21,6 @@ pub fn sse2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
         }
         while size >= 128 {
             asm!(
-                "prefetchnta [{src} + 0]",
-                "prefetchnta [{src} + 64]",
                 "movdqa {temp0}, [{src} + 0]",
                 "movdqa {temp1}, [{src} + 16]",
                 "movdqa {temp2}, [{src} + 32]",
@@ -132,10 +130,6 @@ pub fn avx2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
         debug_assert!(src as usize % 32 == 0);
         while size >= 256 {
             asm!(
-                "prefetchnta [{src} + 0]",
-                "prefetchnta [{src} + 64]",
-                "prefetchnta [{src} + 128]",
-                "prefetchnta [{src} + 192]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovdqa {temp1}, [{src} + 32]",
                 "vmovdqa {temp2}, [{src} + 64]",
@@ -169,8 +163,6 @@ pub fn avx2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
         }
         if size >= 128 {
             asm!(
-                "prefetchnta [{src} + 0]",
-                "prefetchnta [{src} + 64]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovdqa {temp1}, [{src} + 32]",
                 "vmovdqa {temp2}, [{src} + 64]",
@@ -192,7 +184,6 @@ pub fn avx2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
         }
         if size >= 64 {
             asm!(
-                "prefetchnta [{src} + 0]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovdqa {temp1}, [{src} + 32]",
                 "vmovntdq [{dest} + 0], {temp0}",
@@ -208,7 +199,6 @@ pub fn avx2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
         }
         if size >= 32 {
             asm!(
-                "prefetchnta [{src} + 0]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovntdq [{dest} + 0], {temp0}",
                 dest = in(reg) dest,
@@ -238,6 +228,7 @@ pub fn avx2_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize
             size -= 1;
         }
         asm!("sfence");
+        asm!("vzeroupper");
     }
 }
 
@@ -261,8 +252,6 @@ pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
         debug_assert!(src as usize % 16 == 0);
         while n >= 128 {
             asm!(
-                "prefetchnta [{src} + 0]",
-                "prefetchnta [{src} + 64]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovdqa {temp1}, [{src} + 16]",
                 "vmovdqa {temp2}, [{src} + 32]",
@@ -296,7 +285,6 @@ pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
         }
         if n >= 64 {
             asm!(
-                "prefetchnta [{src} + 0]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovdqa {temp1}, [{src} + 16]",
                 "vmovdqa {temp2}, [{src} + 32]",
@@ -318,7 +306,6 @@ pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
         }
         if n >= 32 {
             asm!(
-                "prefetchnta [{src} + 0]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovdqa {temp1}, [{src} + 16]",
                 "movntdq [{dest} + 0], {temp0}",
@@ -351,6 +338,7 @@ pub fn avx_ntcpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
             n -= 1;
         }
         asm!("sfence");
+        asm!("vzeroupper");
     }
 }
 
@@ -359,8 +347,6 @@ pub fn avx512_ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
     unsafe {
         while size >= 128 {
             asm!(
-                "prefetchnta [{src} + 0]",
-                "prefetchnta [{src} + 64]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovdqa {temp0}, [{src} + 64]",
                 "vmovntdq [{dest} + 0], {temp0}",
@@ -376,7 +362,6 @@ pub fn avx512_ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
         }
         if size >= 64 {
             asm!(
-                "prefetchnta [{src} + 0]",
                 "vmovdqa {temp0}, [{src} + 0]",
                 "vmovntdq [{dest} + 0], {temp0}",
                 dest = inout(reg) dest,
@@ -417,6 +402,8 @@ pub fn avx512_ntcpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
             src = src.add(1);
             size -= 1;
         }
+        asm!("sfence");
+        asm!("vzeroupper");
     }
 }
 
@@ -643,6 +630,7 @@ pub fn avx2_cpy(mut dest: *mut c_void, mut src: *const c_void, mut size: usize) 
             src = src.add(1);
             size -= 1;
         }
+        asm!("vzeroupper");
     }
 }
 
@@ -751,6 +739,7 @@ pub fn avx_cpy(mut dest: *mut c_void, mut src: *const c_void, mut n: usize) {
             src = src.add(1);
             n -= 1;
         }
+        asm!("vzeroupper");
     }
 }
 
@@ -814,6 +803,7 @@ pub fn avx512_cpy(mut dest: *mut c_void, mut src: *mut c_void, size: usize) {
             src = src.add(1);
             size -= 1;
         }
+        asm!("vzeroupper");
     }
 }
 

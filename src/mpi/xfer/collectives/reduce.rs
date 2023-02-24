@@ -6,8 +6,9 @@ use crate::debug::DbgEntryExit;
 use crate::types::MpiError::*;
 use crate::xfer::ppp::recv::recv;
 use crate::xfer::ppp::send::send;
+use crate::metatypes::{check_type, type_size};
 use crate::{
-    check_type, debug_xfer, type_size, MPI_Comm, MPI_Datatype, MPI_Op, MpiResult, MPI_CHECK,
+    debug_xfer, MPI_Comm, MPI_Datatype, MPI_Op, MpiResult, MPI_CHECK,
     MPI_MAX, MPI_MIN, MPI_SUM,
 };
 

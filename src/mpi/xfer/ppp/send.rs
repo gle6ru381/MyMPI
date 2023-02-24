@@ -4,6 +4,7 @@ use crate::object::types::Typed;
 use crate::xfer::request::Request;
 use crate::{debug_xfer, shared::*, MPI_CHECK};
 use std::ffi::c_void;
+use crate::metatypes::type_size;
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
@@ -41,6 +42,8 @@ pub(crate) fn isend<T: Typed>(
             tag,
             cnt: buf.len() as i32 * type_size(T::into_mpi())?,
             rank: dest,
+            isColl: false,
+            collRoot: -1
         };
         return Ok(req);
     } else {

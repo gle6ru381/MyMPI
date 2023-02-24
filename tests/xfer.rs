@@ -4,7 +4,7 @@ use std::{
     env::set_var,
     ffi::CStr,
     ptr::null_mut,
-    slice::{from_raw_parts, from_raw_parts_mut},
+    slice::{from_raw_parts, from_raw_parts_mut}
 };
 
 #[test]

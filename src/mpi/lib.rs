@@ -16,7 +16,6 @@ mod xfer;
 
 pub use base::*;
 pub use bindings::*;
-pub use metatypes::*;
 pub use object::context::MpiObject;
 pub use object::types::Data;
 pub use object::types::Promise;

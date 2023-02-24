@@ -49,7 +49,7 @@ static mut CONTEXT: Context = Context {
     comm_group: CommGroup::new(),
     use_nt: false,
     barrier_impl: barrier::barrier_simple,
-    bcast_impl: bcast::bcast_binaty_tree,
+    bcast_impl: bcast::bcast_shm,
     reduce_impl: reduce::reduce_ring,
     gather_impl: gather::gather_ring,
     allreduce_impl: allreduce::allreduce_simple,
@@ -316,6 +316,11 @@ impl Context {
     #[inline(always)]
     pub fn comm_rank(comm: i32) -> i32 {
         unsafe { CONTEXT.comm_group.comm_rank(comm) }
+    }
+
+    #[inline(always)]
+    pub fn comm_prank(comm: i32, idx: i32) -> i32 {
+        unsafe { CONTEXT.comm_group.comm_prank(comm, idx) }
     }
 
     #[inline(always)]

@@ -84,6 +84,10 @@ impl CommGroup {
         self.comms[idx as usize].prank.len() as i32
     }
 
+    pub fn comm_prank(&self, comm: i32, idx: i32) -> i32 {
+        self.comms[comm as usize].prank[idx as usize]
+    }
+
     pub fn comm_rank(&self, idx: i32) -> i32 {
         self.comms[idx as usize].rank
     }
@@ -285,7 +289,6 @@ impl CommGroup {
         //     std::alloc::dealloc(hent as *mut u8, hlayout);
         //     std::alloc::dealloc(pent as *mut u8, layout);
         // }
-        Ok(())
     }
 
     pub fn check(&self, comm: MPI_Comm) -> MpiResult {

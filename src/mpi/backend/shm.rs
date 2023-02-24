@@ -2,10 +2,7 @@
 
 use super::memory::memcpy;
 use crate::{debug_bkd, debug_xfer, shared::*, xfer::request::Request};
-use std::{
-    mem::size_of,
-    ptr::null_mut,
-};
+use std::{mem::size_of, ptr::null_mut};
 
 macro_rules! debug_shm {
     ($fmt:literal) => {
@@ -18,18 +15,18 @@ macro_rules! debug_shm {
 
 #[repr(C)]
 struct Cell {
-    pub len: i32,             // 4
-    pub tag: i32,             // 8
+    pub len: i32,                               // 4
+    pub tag: i32,                               // 8
     pub m_flag: std::sync::atomic::AtomicUsize, // 16
-    pub pad: [i8; 16],        // 32
-    pub buff: [i8; 33554400], // 33 554 432
+    pub pad: [i8; 16],                          // 32
+    pub buff: [i8; 8160],                       // 8192
 }
 
 impl Cell {
     pub const fn buf_len() -> usize {
         let m = null_mut() as *const Self;
-        let p = unsafe {core::ptr::addr_of!((*m).buff)};
-        
+        let p = unsafe { core::ptr::addr_of!((*m).buff) };
+
         const fn size_of_raw<T>(_: *const T) -> usize {
             core::mem::size_of::<T>()
         }
@@ -48,7 +45,8 @@ impl Cell {
 
     #[inline(always)]
     pub fn dec_flag(&mut self) {
-        self.m_flag.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        self.m_flag
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     #[inline(always)]
@@ -71,7 +69,7 @@ struct MpiShm {
     nsend: i8,     // 1
     nrecv: i8,     // 2
     pad: [i8; 30], // 32
-    cells: [Cell; 2],
+    cells: [Cell; 16],
 }
 
 impl MpiShm {
@@ -262,9 +260,24 @@ impl ShmData {
 
         debug_shm!("Enter recover progress");
 
+        let rank = Context::comm_rank(req.comm);
+        let size = Context::comm_size(req.comm);
+
         let d = unsafe { &mut *this };
         let pshm = unsafe {
-            &mut *d.d.add((req.rank * Context::size() + Context::rank()) as usize)
+            if req.isColl {
+                let rootRank = Context::comm_prank(req.comm, req.collRoot);
+                debug_shm!("Recover root rank: {rootRank}");
+                debug_shm!("Recv cell index: {}", rootRank * size + rootRank);
+                d.d.add((rootRank * size + rootRank) as usize)
+                    .as_mut()
+                    .unwrap_unchecked()
+            } else {
+                debug_shm!("Recv cell index: {}", rank * size + req.rank);
+                d.d.add((req.rank * size + rank) as usize)
+                    .as_mut()
+                    .unwrap_unchecked()
+            }
         };
 
         pshm.recv_cell().wait_ne(0);
@@ -328,7 +341,10 @@ impl ShmData {
                 pshm.recv_cell().buff.as_ptr() as *const c_void,
                 Cell::buf_len(),
             );
-            pshm.recv_cell().set_flag(0);
+            pshm.recv_cell().dec_flag();
+            if req.isColl {
+                pshm.recv_cell().wait_eq(0);
+            }
             pshm.swapRecv();
             pshm.recv_cell().wait_ne(0);
 
@@ -338,7 +354,10 @@ impl ShmData {
 
         debug_assert!(pshm.recv_cell().buff.as_ptr() as *const c_void as usize % 32 == 0);
         memcpy(buf, pshm.recv_cell().buff.as_ptr() as *const c_void, length);
-        pshm.recv_cell().set_flag(0);
+        pshm.recv_cell().dec_flag();
+        if req.isColl {
+            pshm.recv_cell().wait_eq(0);
+        }
         pshm.swapRecv();
 
         req.stat.MPI_SOURCE = req.rank;
@@ -356,12 +375,27 @@ impl ShmData {
         if req.flag != 0 {
             return Ok(());
         }
+        let rank = Context::comm_rank(req.comm);
+        let size = Context::comm_size(req.comm);
+        let flagValue: usize;
 
         let d = unsafe { &mut *this };
         let pshm = unsafe {
-            d.d.add((Context::rank() * Context::size() + req.rank) as usize)
-                .as_mut()
-                .unwrap_unchecked()
+            if req.isColl {
+                flagValue = size as usize - 1;
+                let rootRank = Context::comm_prank(req.comm, req.collRoot);
+                debug_shm!("Send root rank: {rootRank}");
+                debug_shm!("Send cell index: {}", rootRank * size + rootRank);
+                d.d.add((rootRank * size + rootRank) as usize)
+                    .as_mut()
+                    .unwrap_unchecked()
+            } else {
+                flagValue = 1;
+                debug_shm!("Send cell index: {}", rank * size + req.rank);
+                d.d.add((rank * size + req.rank) as usize)
+                    .as_mut()
+                    .unwrap_unchecked()
+            }
         };
 
         pshm.send_cell().wait_eq(0);
@@ -378,7 +412,7 @@ impl ShmData {
                 buf,
                 Cell::buf_len(),
             );
-            pshm.send_cell().set_flag(1);
+            pshm.send_cell().set_flag(flagValue);
             pshm.swapSend();
             pshm.send_cell().wait_eq(0);
 
@@ -391,7 +425,7 @@ impl ShmData {
             buf,
             length,
         );
-        pshm.send_cell().set_flag(1);
+        pshm.send_cell().set_flag(flagValue);
         pshm.swapSend();
 
         req.stat.MPI_SOURCE = req.rank;

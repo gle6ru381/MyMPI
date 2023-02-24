@@ -1,5 +1,5 @@
 pub(crate) use crate::{
-    backend::reqqueue::RequestQueue, context::Context, type_size, types::MpiError::*,
+    backend::reqqueue::RequestQueue, context::Context, types::MpiError::*,
     types::MpiResult, types::*,
 };
 

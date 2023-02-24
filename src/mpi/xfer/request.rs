@@ -17,6 +17,8 @@ pub struct Request {
     pub tag: i32,
     pub cnt: i32,
     pub rank: i32,
+    pub isColl: bool,
+    pub collRoot: i32,
 }
 
 impl Default for Request {
@@ -35,6 +37,8 @@ impl Request {
             tag: 0,
             cnt: 0,
             rank: 0,
+            isColl: false,
+            collRoot: -1
         }
     }
 

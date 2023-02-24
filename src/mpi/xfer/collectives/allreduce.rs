@@ -6,7 +6,8 @@ use crate::buffer::DynBuffer;
 use crate::context::Context;
 use crate::debug::DbgEntryExit;
 use crate::xfer::ppp::sendrecv;
-use crate::{check_type, debug_coll, MPI_Comm, MPI_Datatype, MPI_Op, MpiResult};
+use crate::metatypes::check_type;
+use crate::{debug_coll, MPI_Comm, MPI_Datatype, MPI_Op, MpiResult};
 
 macro_rules! DbgEnEx {
     ($name:literal) => {

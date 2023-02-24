@@ -2,6 +2,7 @@ use super::keychanger::KeyChanger;
 use crate::debug::DbgEntryExit;
 use crate::xfer::ppp::recv::recv;
 use crate::xfer::ppp::send::send;
+use crate::xfer::request::Request;
 use crate::{debug_xfer, shared::*, MPI_CHECK};
 
 pub type BCastFn = fn(&mut [u8], i32, MPI_Comm) -> MpiResult;
@@ -14,12 +15,77 @@ macro_rules! DbgEnEx {
 
 const BCAST_TAG: i32 = 1;
 
-pub fn bcast_binaty_tree(buf: &mut [u8], mut root: i32, comm: MPI_Comm) -> MpiResult {
-    MPI_CHECK!(root >= 0 && root < Context::size(), comm, MPI_ERR_ROOT);
+pub fn bcast_shm(buf: &mut [u8], root: i32, comm: MPI_Comm) -> MpiResult {
+    MPI_CHECK!(
+        root >= 0 && root < Context::comm_size(comm),
+        comm,
+        MPI_ERR_ROOT
+    );
 
     DbgEnEx!("Broadcast");
 
-    if Context::size() == 1 || buf.len() == 0 {
+    if Context::comm_size(comm) == 1 || buf.len() == 0 {
+        return Ok(());
+    }
+
+    let _ks = KeyChanger::new(Context::comm(), comm);
+    let rootRank = Context::comm_prank(comm, root);
+    let rank = Context::comm_rank(comm);
+    let size = Context::comm_size(comm);
+
+    if rank == rootRank {
+        let new_req = Context::shm().get_send();
+        if let Some(req) = new_req {
+            *req = Request {
+                buf: buf.as_ptr() as *mut c_void,
+                stat: MPI_Status::new(),
+                comm,
+                flag: 0,
+                tag: BCAST_TAG,
+                cnt: buf.len() as i32,
+                rank: -1,
+                isColl: true,
+                collRoot: root,
+            };
+            req.wait(None)?;
+            return Ok(());
+        } else {
+            Context::err_handler().call(comm, MPI_ERR_INTERN);
+            return Err(MPI_ERR_INTERN);
+        }
+    } else {
+        let new_req = Context::shm().get_recv();
+        if let Some(req) = new_req {
+            *req = Request {
+                buf: buf.as_ptr() as *mut c_void,
+                stat: MPI_Status::new(),
+                comm,
+                flag: 0,
+                tag: BCAST_TAG,
+                cnt: buf.len() as i32,
+                rank: -1,
+                isColl: true,
+                collRoot: root,
+            };
+            req.wait(None)?;
+            return Ok(());
+        } else {
+            Context::err_handler().call(comm, MPI_ERR_INTERN);
+            return Err(MPI_ERR_INTERN);
+        }
+    }
+}
+
+pub fn bcast_binaty_tree(buf: &mut [u8], mut root: i32, comm: MPI_Comm) -> MpiResult {
+    MPI_CHECK!(
+        root >= 0 && root < Context::comm_size(comm),
+        comm,
+        MPI_ERR_ROOT
+    );
+
+    DbgEnEx!("Broadcast");
+
+    if Context::comm_size(comm) == 1 || buf.len() == 0 {
         return Ok(());
     }
 
