@@ -1,16 +1,17 @@
 use std::fs::create_dir;
 
 macro_rules! bench_create_internal {
-    ($name:literal, $tasks:literal) => {
+    ($name:literal, $tasks:literal, $out:expr) => {
         std::process::Command::new(concat!("C/build/benches/", $name))
-        .arg(concat!("C/output/", $name, "/", $name, "_", stringify!($tasks), "_.csv"))
+        .arg(concat!("C/output/", $name, "/", $out, "_", stringify!($tasks), "_.csv"))
         .arg(stringify!($tasks))
     };
 }
 
 macro_rules! bench_internal {
     ($name:literal, $tasks:literal) => {
-        bench_create_internal!($name, $tasks)
+        let _ = create_dir(concat!("C/output/", $name));
+        bench_create_internal!($name, $tasks, $name)
         .spawn()
         .unwrap()
         .wait()
@@ -20,7 +21,8 @@ macro_rules! bench_internal {
 
 macro_rules! bench_nt_internal {
     ($name:literal, $tasks:literal) => {
-        bench_create_internal!($name, $tasks)
+        let _ = create_dir(concat!("C/output/", $name));
+        bench_create_internal!($name, $tasks, concat!("nt", $name))
         .env("MPI_USE_NT", "1")
         .spawn()
         .unwrap()
