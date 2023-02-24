@@ -85,6 +85,8 @@ void collective_bench(char const* fName, Predicate func)
             "time min\n");
 #endif
 
+    std::cerr << "Run bench\n";
+
     for (int vec_idx = 0; vec_idx < (int)std::size(vec_sizes); vec_idx++) {
         auto const vec_size = vec_sizes[vec_idx] / 8;
         auto vec = std::vector<long>(vec_size);
@@ -95,6 +97,7 @@ void collective_bench(char const* fName, Predicate func)
         for (int sample = 0; sample < nsamples; sample++) {
             long tmpVal;
             auto data = vec.data();
+            std::cerr << "Sample: " << sample << '\n';
             for (auto l = 0; l < vec_size; l++) {
                 asm volatile("movq (%1, %2, 8),%0"
                              : "=r"(tmpVal)
