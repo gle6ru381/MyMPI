@@ -1,8 +1,10 @@
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
+use libc::SYS_request_key;
+
 use super::memory::memcpy;
 use crate::{debug_bkd, debug_xfer, shared::*, xfer::request::Request};
-use std::{mem::size_of, ptr::null_mut};
+use std::{mem::size_of, ptr::null_mut, sync::atomic::AtomicI8};
 
 macro_rules! debug_shm {
     ($fmt:literal) => {
@@ -18,7 +20,8 @@ struct Cell {
     pub len: i32,                               // 4
     pub tag: i32,                               // 8
     pub m_flag: std::sync::atomic::AtomicUsize, // 16
-    pub pad: [i8; 16],                          // 32
+    pub coll_flag: AtomicI8,                    // 17
+    pub pad: [i8; 15],                          // 32
     pub buff: [i8; 8160],                       // 8192
 }
 
@@ -31,6 +34,11 @@ impl Cell {
             core::mem::size_of::<T>()
         }
         size_of_raw(p)
+    }
+
+    pub fn set_coll_flag(&self, val: i8) {
+        self.coll_flag
+            .store(val, std::sync::atomic::Ordering::SeqCst);
     }
 
     #[inline(always)]
@@ -66,31 +74,71 @@ impl Cell {
 
 #[repr(C)]
 struct MpiShm {
-    nsend: i8,     // 1
-    nrecv: i8,     // 2
-    pad: [i8; 30], // 32
+    nsend: AtomicI8, // 1
+    nrecv: AtomicI8, // 2
+    pad: [i8; 30],   // 32
     cells: [Cell; 16],
 }
 
 impl MpiShm {
     #[inline(always)]
     pub fn swapSend(&mut self) {
-        self.nsend = (self.nsend + 1) % self.cells.len() as i8;
+        let idx = self.nsend.load(std::sync::atomic::Ordering::SeqCst);
+        self.nsend.store(
+            (idx + 1) % self.cells.len() as i8,
+            std::sync::atomic::Ordering::SeqCst,
+        );
     }
 
     #[inline(always)]
     pub fn swapRecv(&mut self) {
-        self.nrecv = (self.nrecv + 1) % self.cells.len() as i8;
+        let idx = self.nrecv.load(std::sync::atomic::Ordering::SeqCst);
+        self.nrecv.store(
+            (idx + 1) % self.cells.len() as i8,
+            std::sync::atomic::Ordering::SeqCst,
+        );
+    }
+
+    #[inline(always)]
+    pub fn coll_wait_and_swap(&mut self) {
+        debug_shm!("Coll dec flag");
+        let cell = self.recv_cell() as *mut Cell;
+        let flag = unsafe { &mut (*cell).m_flag };
+        let coll_flag = unsafe { &mut (*cell).coll_flag };
+        debug_shm!(
+            "Flag: {}, value: {}, coll_flag: {}",
+            flag as *mut _ as usize,
+            flag.load(std::sync::atomic::Ordering::SeqCst),
+            coll_flag.load(std::sync::atomic::Ordering::SeqCst)
+        );
+        if coll_flag.fetch_sub(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+            self.swapRecv();
+            coll_flag.store(-1, std::sync::atomic::Ordering::SeqCst);
+            while flag.load(std::sync::atomic::Ordering::SeqCst) != 1 {
+                continue;
+            }
+            flag.store(0, std::sync::atomic::Ordering::SeqCst);
+        } else {
+            while coll_flag.load(std::sync::atomic::Ordering::SeqCst) != -1 {
+                continue;
+            }
+            flag.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        debug_shm!(
+            "End coll_wait_and_swap, value: {}, coll_flag: {}",
+            flag.load(std::sync::atomic::Ordering::SeqCst),
+            coll_flag.load(std::sync::atomic::Ordering::SeqCst)
+        );
     }
 
     #[inline(always)]
     pub fn recv_cell(&mut self) -> &mut Cell {
-        &mut self.cells[self.nrecv as usize]
+        &mut self.cells[self.nrecv.load(std::sync::atomic::Ordering::SeqCst) as usize]
     }
 
     #[inline(always)]
     pub fn send_cell(&mut self) -> &mut Cell {
-        &mut self.cells[self.nsend as usize]
+        &mut self.cells[self.nsend.load(std::sync::atomic::Ordering::SeqCst) as usize]
     }
 }
 
@@ -280,6 +328,11 @@ impl ShmData {
             }
         };
 
+        debug_shm!(
+            "Recv buffer index: {}",
+            pshm.nrecv.load(std::sync::atomic::Ordering::SeqCst)
+        );
+
         pshm.recv_cell().wait_ne(0);
 
         debug_shm!("Wait cell");
@@ -341,11 +394,12 @@ impl ShmData {
                 pshm.recv_cell().buff.as_ptr() as *const c_void,
                 Cell::buf_len(),
             );
-            pshm.recv_cell().dec_flag();
             if req.isColl {
-                pshm.recv_cell().wait_eq(0);
+                pshm.coll_wait_and_swap();
+            } else {
+                pshm.recv_cell().dec_flag();
+                pshm.swapRecv();
             }
-            pshm.swapRecv();
             pshm.recv_cell().wait_ne(0);
 
             buf = unsafe { buf.add(Cell::buf_len()) };
@@ -354,11 +408,12 @@ impl ShmData {
 
         debug_assert!(pshm.recv_cell().buff.as_ptr() as *const c_void as usize % 32 == 0);
         memcpy(buf, pshm.recv_cell().buff.as_ptr() as *const c_void, length);
-        pshm.recv_cell().dec_flag();
         if req.isColl {
-            pshm.recv_cell().wait_eq(0);
+            pshm.coll_wait_and_swap();
+        } else {
+            pshm.recv_cell().dec_flag();
+            pshm.swapRecv();
         }
-        pshm.swapRecv();
 
         req.stat.MPI_SOURCE = req.rank;
         req.stat.MPI_TAG = req.tag;
@@ -384,19 +439,25 @@ impl ShmData {
             if req.isColl {
                 flagValue = size as usize - 1;
                 let rootRank = Context::comm_prank(req.comm, req.collRoot);
-                debug_shm!("Send root rank: {rootRank}");
-                debug_shm!("Send cell index: {}", rootRank * size + rootRank);
+                // debug_shm!("Send root rank: {rootRank}");
+                // debug_shm!("Send cell index: {}", rootRank * size + rootRank);
                 d.d.add((rootRank * size + rootRank) as usize)
                     .as_mut()
                     .unwrap_unchecked()
             } else {
                 flagValue = 1;
-                debug_shm!("Send cell index: {}", rank * size + req.rank);
+//                debug_shm!("Send cell index: {}", rank * size + req.rank);
                 d.d.add((rank * size + req.rank) as usize)
                     .as_mut()
                     .unwrap_unchecked()
             }
         };
+
+        debug_shm!(
+            "Send buffer index: {}, flag: {}",
+            pshm.nsend.load(std::sync::atomic::Ordering::SeqCst),
+            pshm.send_cell().flag()
+        );
 
         pshm.send_cell().wait_eq(0);
 
@@ -404,7 +465,7 @@ impl ShmData {
         let mut buf = req.buf;
         pshm.send_cell().len = req.cnt;
         pshm.send_cell().tag = req.tag;
-        debug_shm!("Send length: {length}");
+        debug_shm!("Send length: {length}, flag value: {flagValue}");
 
         while length > Cell::buf_len() {
             memcpy(
@@ -412,6 +473,9 @@ impl ShmData {
                 buf,
                 Cell::buf_len(),
             );
+            if req.isColl {
+                pshm.send_cell().set_coll_flag(flagValue as i8);
+            }
             pshm.send_cell().set_flag(flagValue);
             pshm.swapSend();
             pshm.send_cell().wait_eq(0);
@@ -425,6 +489,9 @@ impl ShmData {
             buf,
             length,
         );
+        if req.isColl {
+            pshm.send_cell().set_coll_flag(flagValue as i8);
+        }
         pshm.send_cell().set_flag(flagValue);
         pshm.swapSend();
 
@@ -433,7 +500,7 @@ impl ShmData {
         req.stat.cnt = req.cnt;
         req.flag = 1;
 
-        debug_shm!("Success send to {}", req.tag);
+//        debug_shm!("Success send to {}", req.tag);
 
         Ok(())
     }

@@ -3,26 +3,25 @@ use crate::debug::DbgEntryExit;
 use crate::xfer::ppp::recv::recv;
 use crate::xfer::ppp::send::send;
 use crate::xfer::request::Request;
-use crate::{debug_xfer, shared::*, MPI_CHECK};
+use crate::{debug_coll, shared::*, MPI_CHECK};
 
 pub type BCastFn = fn(&mut [u8], i32, MPI_Comm) -> MpiResult;
 
 macro_rules! DbgEnEx {
     ($name:literal) => {
-        let _dbgEnEx = DbgEntryExit::new(|s| debug_xfer!($name, "{s}"));
+        let _dbgEnEx = DbgEntryExit::new(|s| debug_coll!($name, "{s}"));
     };
 }
 
 const BCAST_TAG: i32 = 1;
 
 pub fn bcast_shm(buf: &mut [u8], root: i32, comm: MPI_Comm) -> MpiResult {
+    DbgEnEx!("Broadcast");
     MPI_CHECK!(
         root >= 0 && root < Context::comm_size(comm),
         comm,
         MPI_ERR_ROOT
     );
-
-    DbgEnEx!("Broadcast");
 
     if Context::comm_size(comm) == 1 || buf.len() == 0 {
         return Ok(());

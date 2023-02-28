@@ -4,7 +4,7 @@ use std::{
     env::set_var,
     ffi::CStr,
     ptr::null_mut,
-    slice::{from_raw_parts, from_raw_parts_mut}
+    slice::{from_raw_parts, from_raw_parts_mut},
 };
 
 #[test]
@@ -311,13 +311,15 @@ fn test_bcast_4() {
         }
     }
 
-    MPI_Bcast(
-        rbuf as *mut c_void,
-        expect.len() as i32,
-        MPI_BYTE,
-        0,
-        MPI_COMM_WORLD,
-    );
+    for _ in 0..100000 {
+        MPI_Bcast(
+            rbuf as *mut c_void,
+            expect.len() as i32,
+            MPI_BYTE,
+            0,
+            MPI_COMM_WORLD,
+        );
+    }
 
     assert_eq!(unsafe { from_raw_parts(rbuf, expect.len()) }, expect);
 

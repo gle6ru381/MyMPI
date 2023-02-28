@@ -105,7 +105,7 @@ pub struct DbgEntryExit<T: Fn(&'static str)> {
 #[cfg(debug_assertions)]
 impl<T: Fn(&'static str)> DbgEntryExit<T> {
     pub fn new(func: T) -> Self {
-        if cfg!(dbgentryfn) {
+        if cfg!(feature = "dbgentryfn") {
             func("Enter");
         }
         DbgEntryExit { func }
@@ -115,7 +115,7 @@ impl<T: Fn(&'static str)> DbgEntryExit<T> {
 #[cfg(debug_assertions)]
 impl<T: Fn(&'static str)> Drop for DbgEntryExit<T> {
     fn drop(&mut self) {
-        if cfg!(dbgentryfn) {
+        if cfg!(feature = "dbgentryfn") {
             (self.func)("Exit");
         }
     }
