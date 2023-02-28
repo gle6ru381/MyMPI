@@ -97,7 +97,6 @@ void collective_bench(char const* fName, Predicate func)
         for (int sample = 0; sample < nsamples; sample++) {
             long tmpVal;
             auto data = vec.data();
-            std::cerr << "Sample: " << sample << '\n';
             for (auto l = 0; l < vec_size; l++) {
                 asm volatile("movq (%1, %2, 8),%0"
                              : "=r"(tmpVal)

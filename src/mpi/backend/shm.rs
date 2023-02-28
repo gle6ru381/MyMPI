@@ -199,13 +199,6 @@ impl ShmData {
     }
 
     pub fn free_req(&mut self, req: MPI_Request) {
-        debug_xfer!(
-            "Test",
-            "send queue: {}, unexp: {}, recv: {}",
-            self.send_queue.len(),
-            self.unexp_queue.len(),
-            self.recv_queue.len()
-        );
         self.find_queue(req).erase_ptr(req);
     }
 
@@ -315,23 +308,15 @@ impl ShmData {
         let pshm = unsafe {
             if req.isColl {
                 let rootRank = Context::comm_prank(req.comm, req.collRoot);
-                debug_shm!("Recover root rank: {rootRank}");
-                debug_shm!("Recv cell index: {}", rootRank * size + rootRank);
                 d.d.add((rootRank * size + rootRank) as usize)
                     .as_mut()
                     .unwrap_unchecked()
             } else {
-                debug_shm!("Recv cell index: {}", rank * size + req.rank);
                 d.d.add((req.rank * size + rank) as usize)
                     .as_mut()
                     .unwrap_unchecked()
             }
         };
-
-        debug_shm!(
-            "Recv buffer index: {}",
-            pshm.nrecv.load(std::sync::atomic::Ordering::SeqCst)
-        );
 
         pshm.recv_cell().wait_ne(0);
 
@@ -439,25 +424,16 @@ impl ShmData {
             if req.isColl {
                 flagValue = size as usize - 1;
                 let rootRank = Context::comm_prank(req.comm, req.collRoot);
-                // debug_shm!("Send root rank: {rootRank}");
-                // debug_shm!("Send cell index: {}", rootRank * size + rootRank);
                 d.d.add((rootRank * size + rootRank) as usize)
                     .as_mut()
                     .unwrap_unchecked()
             } else {
                 flagValue = 1;
-//                debug_shm!("Send cell index: {}", rank * size + req.rank);
                 d.d.add((rank * size + req.rank) as usize)
                     .as_mut()
                     .unwrap_unchecked()
             }
         };
-
-        debug_shm!(
-            "Send buffer index: {}, flag: {}",
-            pshm.nsend.load(std::sync::atomic::Ordering::SeqCst),
-            pshm.send_cell().flag()
-        );
 
         pshm.send_cell().wait_eq(0);
 
@@ -465,7 +441,7 @@ impl ShmData {
         let mut buf = req.buf;
         pshm.send_cell().len = req.cnt;
         pshm.send_cell().tag = req.tag;
-        debug_shm!("Send length: {length}, flag value: {flagValue}");
+        debug_shm!("Send length: {length}");
 
         while length > Cell::buf_len() {
             memcpy(
@@ -500,7 +476,7 @@ impl ShmData {
         req.stat.cnt = req.cnt;
         req.flag = 1;
 
-//        debug_shm!("Success send to {}", req.tag);
+        debug_shm!("Success send to {}", req.tag);
 
         Ok(())
     }
