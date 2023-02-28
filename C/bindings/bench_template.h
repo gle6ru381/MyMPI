@@ -15,9 +15,9 @@
 #define NEED_HEADER 0
 #endif
 
-static constexpr int nsamples = 200;
-static constexpr int vec_sizes[] = {15'360, 130'048, 10'480'640, 20'961'280};
-static constexpr int msg_sizes[] = {15'360, 130'048, 10'480'640, 20'961'280};
+static constexpr int nsamples = 150;
+static constexpr int vec_sizes[] = {15'360, 130'048, 10'480'640, 20'961'280, 67'108'864};
+static constexpr int msg_sizes[] = {15'360, 130'048, 10'480'640, 20'961'280, 67'108'864};
 
 constexpr int bench_max_size()
 {
@@ -84,8 +84,6 @@ void collective_bench(char const* fName, Predicate func)
             "Send "
             "time min\n");
 #endif
-
-    std::cerr << "Run bench\n";
 
     for (int vec_idx = 0; vec_idx < (int)std::size(vec_sizes); vec_idx++) {
         auto const vec_size = vec_sizes[vec_idx] / 8;
